@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "calibration_data": {
+    "hand_size_reference": 1.0,
+    "distance_threshold": 0.1,
+    "angle_threshold": 15.0
+  },
+  "user_preferences": {
+    "sensitivity": "medium",
+    "handedness": "right"
+  }
+}
