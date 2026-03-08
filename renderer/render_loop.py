@@ -16,8 +16,9 @@ Pipeline position
         ├─ AnimationEngine.tick()
         ├─ TransformApplier (scene + per-object transforms)
         ├─ _draw_object() per primitive
-        ├─ glReadPixels → raw_frame (H×W×3)
-        └─ _write_frame_to_state() → SceneState.current_frame (360×18×3)
+        ├─ FrameExtractor.extract() → raw_frame (WINDOW_H × WINDOW_W × 3)
+        ├─ cylindrical_engine.build_frame() → cylindrical frame (360 × 18 × 3)
+        └─ SceneState.current_frame ← (360, 18, 3) uint8
 
 Threading model
 ---------------
@@ -28,15 +29,15 @@ Threading model
 
 Frame capture
 -------------
-:meth:`_capture_raw_frame` reads the back-buffer with ``glReadPixels`` into a
-``(WINDOW_H, WINDOW_W, 3) uint8`` NumPy array.  This raw frame is stored in
-:attr:`raw_frame` for the cylindrical-projection engine (implemented in a
-later module).
+:meth:`_capture_and_write_frame` reads the back-buffer with ``glReadPixels``
+via :class:`~renderer.frame_extractor.FrameExtractor` into a
+``(WINDOW_H, WINDOW_W, 3) uint8`` NumPy array stored in :attr:`raw_frame`.
 
-A **temporary placeholder** downsamples the raw frame to ``(360, 18, 3)``
-using simple stride-based indexing and writes it into
-:attr:`~renderer.scene_state.SceneState.current_frame`.  The cylindrical
-projector will replace this path.
+The raw frame is then converted to the ``(360, 18, 3)`` cylindrical LED
+display format by :func:`~cylindrical_engine.frame_builder.build_frame`,
+which applies scene-level transforms (rotation_y, scale) and anti-aliased
+cylindrical projection before writing to
+:attr:`~renderer.scene_state.SceneState.current_frame`.
 
 Supported primitives
 --------------------
@@ -135,9 +136,11 @@ from OpenGL.GLU import (
 )
 
 from renderer.animation import AnimationEngine
+from renderer.frame_extractor import FrameExtractor
 from renderer.scene_builder import RenderObject, SceneBuildError, SceneBuilder
 from renderer.scene_state import SceneState
 from renderer.transform_applier import TransformApplier
+from cylindrical_engine.frame_builder import build_frame
 
 
 # ---------------------------------------------------------------------------
@@ -148,11 +151,6 @@ TARGET_FPS: int = 25
 _FRAME_DT: float = 1.0 / TARGET_FPS
 WINDOW_W: int = 800
 WINDOW_H: int = 800
-
-# Desired output frame shape written to SceneState.current_frame.
-# The real cylindrical projection is implemented in a later module.
-_OUT_H: int = 360
-_OUT_W: int = 18
 
 # Torus tessellation quality (ring primitive)
 _TORUS_MAJOR_SEGS: int = 64   # segments around the major circle
@@ -224,6 +222,7 @@ class Renderer:
         self._builder: SceneBuilder = SceneBuilder()
         self._anim: AnimationEngine = AnimationEngine()
         self._transform: TransformApplier = TransformApplier()
+        self._frame_extractor: FrameExtractor = FrameExtractor()
         self._objects: List[RenderObject] = []
 
         # Change detection
@@ -401,7 +400,7 @@ class Renderer:
         # ── 7: label overlay ─────────────────────────────────────────
         self._draw_labels(explode)
 
-        # ── 8: frame capture ─────────────────────────────────────────
+        # ── 7 & 8: frame extraction + cylindrical conversion ───────
         self._capture_and_write_frame()
 
     # ------------------------------------------------------------------
@@ -678,36 +677,37 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _capture_and_write_frame(self) -> None:
-        """Read the back-buffer, store as :attr:`raw_frame`, write SceneState.
+        """Extract the back-buffer and write the cylindrical frame to SceneState.
 
-        Steps:
+        Full pipeline:
 
-        1. ``glReadPixels`` → flat byte buffer.
-        2. Reshape to ``(WINDOW_H, WINDOW_W, 3)`` uint8.
-        3. Flip vertically (OpenGL origin is bottom-left; NumPy is top-left).
-        4. Store in :attr:`_raw_frame` under lock.
-        5. Temporary downsampling → ``(360, 18, 3)`` for SceneState.
+        1. :class:`~renderer.frame_extractor.FrameExtractor` calls
+           ``glReadPixels`` directly into a reused NumPy buffer, reshapes and
+           flips it → ``(WINDOW_H, WINDOW_W, 3) uint8``.
+        2. The raw frame is stored in :attr:`_raw_frame` under the lock for
+           external consumers (e.g. debugging / recording).
+        3. :func:`~cylindrical_engine.frame_builder.build_frame` converts the
+           animated object graph — together with the current scene-state
+           transforms — into the ``(360, 18, 3) uint8`` cylindrical LED frame.
+        4. The result is written atomically to
+           :attr:`~renderer.scene_state.SceneState.current_frame`.
         """
-        buf_size = WINDOW_W * WINDOW_H * 3
-        buf = (GLfloat * 1)()  # placeholder; use the right type below
-        # Use unsigned byte array
-        from ctypes import c_ubyte
-        pixel_buf = (c_ubyte * buf_size)()
-        glReadPixels(0, 0, WINDOW_W, WINDOW_H, GL_RGB, GL_UNSIGNED_BYTE, pixel_buf)
+        # ── Step 1: glReadPixels → (WINDOW_H, WINDOW_W, 3) uint8 ─────────
+        raw = self._frame_extractor.extract(WINDOW_W, WINDOW_H)
 
-        raw = np.frombuffer(pixel_buf, dtype=np.uint8).reshape(WINDOW_H, WINDOW_W, 3)
-        raw = np.flipud(raw).copy()   # flip rows: GL is bottom-up, numpy is top-down
-
+        # ── Step 2: store raw frame (thread-safe) ────────────────────────
         with self._raw_frame_lock:
             self._raw_frame = raw
 
-        # ── Temporary placeholder: downsample to (360, 18, 3) ──────────────
-        # The real cylindrical projection replaces this path.
-        # Simple stride-based nearest-neighbour subsample.
-        row_indices = np.linspace(0, WINDOW_H - 1, _OUT_H, dtype=int)
-        col_indices = np.linspace(0, WINDOW_W - 1, _OUT_W, dtype=int)
-        frame_small = raw[np.ix_(row_indices, col_indices)]   # (360, 18, 3)
-        self._state.current_frame = frame_small.astype(np.uint8)
+        # ── Step 3: cylindrical projection ──────────────────────────────
+        # build_frame() reads rotation_y and scale from scene_state internally
+        # via SceneState.get_render_params(), then projects object world
+        # positions through the cylindrical mapping with anti-aliasing and
+        # brighter-wins overlap resolution.
+        cyl_frame = build_frame(self._objects, self._state)   # (360, 18, 3) uint8
+
+        # ── Step 4: write to blackboard ──────────────────────────────────
+        self._state.current_frame = cyl_frame
 
     # ------------------------------------------------------------------
     # OpenGL initialisation
