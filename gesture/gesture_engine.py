@@ -11,6 +11,7 @@ import mediapipe as mp
 import numpy as np
 import time
 import threading
+from collections import deque
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any, List
 from .camera.camera_config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
@@ -368,7 +369,9 @@ class GestureEngine:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         self.frame_timestamp_ms += 33  # monotonic ~30 FPS increment
-        
+        #Everything before this prepares the frame.
+        #Everything after this interprets the AI output.
+        #........................................................................................................
         try:
             hand_result = self.hand_landmarker.detect_for_video(mp_image, self.frame_timestamp_ms)
             
@@ -506,15 +509,27 @@ class GestureEngine:
             # Display frame
             cv2.imshow("Gesture Engine", frame)
             
-            # FPS tracking
+            # FPS tracking + detection output
             self.fps_counter += 1
-            if self.fps_counter % 30 == 0:
+            if self.fps_counter % 10 == 0:
                 current_time = time.time()
                 elapsed = current_time - self.fps_start_time
-                if elapsed > 0:
-                    fps = 30 / elapsed
-                    print(f"FPS: {fps:.1f}")
+                fps = (10 / elapsed) if elapsed > 0 else 0.0
                 self.fps_start_time = current_time
+
+                pose = self.get_hand_pose()
+                gesture_data = self.get_current_gesture()
+                if pose:
+                    print(
+                        f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | "
+                        f"gesture={gesture_data['gesture']:<12} conf={gesture_data['confidence']:.2f} | "
+                        f"center=({pose['center'][0]:.3f},{pose['center'][1]:.3f}) | "
+                        f"pinch={pose['pinch_strength']:.3f} {'PINCH' if pose['pinch_active'] else '     '} | "
+                        f"curl={pose['avg_curl']:.3f} {'FIST' if pose['fist_active'] else '    '} | "
+                        f"dx={pose['dx']:+.4f} dy={pose['dy']:+.4f}"
+                    )
+                else:
+                    print(f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | NO HAND DETECTED")
             
             # Check for exit
             if cv2.waitKey(1) & 0xFF == ord('q'):
