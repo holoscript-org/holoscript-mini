@@ -15,6 +15,7 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any, List
 from .camera.camera_config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
+from core.state.scene_state import scene_state
 
 try:
     from mediapipe.tasks import python as mp_tasks
@@ -94,6 +95,11 @@ class GestureEngine:
         self._prev_pinch: Optional[float] = None
         self._prev_avg_curl: Optional[float] = None
         self._prev_center: Optional[Tuple] = None
+
+        # Motion smoothing for scene updates (Week-3 stability)
+        self.prev_dx: float = 0.0
+        self.prev_dy: float = 0.0
+        self.motion_alpha: float = 0.7
     
     def _convert_mediapipe_landmarks(self, landmarks_list) -> List:
         """Convert MediaPipe Tasks landmarks to legacy format for compatibility."""
@@ -357,6 +363,54 @@ class GestureEngine:
             if hasattr(state_object, 'gesture_confidence'):
                 state_object.gesture_confidence = self.gesture_confidence
     
+    def _apply_gesture_to_scene(self, pose: Optional[Dict[str, Any]]) -> None:
+        """Update SceneState based on the current hand pose.
+
+        Mapping:
+            PINCH (pinch_active)     → rotate  (rotation_y += dx * 200)
+            FIST  (fist_active)      → freeze  (frozen = True)
+            OPEN HAND (neither)      → zoom    (scale clamped to [0.5, 3.0])
+
+        Stability layer (Week-3):
+            - Confidence filter:  drops frames below 0.6 confidence
+            - Motion smoothing:   exponential filter on dx/dy (alpha=0.7)
+            - Dead-zone:          ignores movements smaller than 0.01
+            - Safe zoom:          only zooms when avg_curl < 0.2 (clearly open hand)
+        """
+        if pose is None:
+            return
+
+        # 1. Confidence filter — ignore unstable frames
+        if pose["confidence"] < 0.6:
+            return
+
+        # 2. Exponential smoothing on raw motion deltas
+        dx = self.motion_alpha * pose["dx"] + (1 - self.motion_alpha) * self.prev_dx
+        dy = self.motion_alpha * pose["dy"] + (1 - self.motion_alpha) * self.prev_dy
+        self.prev_dx = dx
+        self.prev_dy = dy
+
+        # 3. Dead-zone — suppress tiny jitter
+        dead_zone = 0.01
+        if abs(dx) < dead_zone:
+            dx = 0.0
+        if abs(dy) < dead_zone:
+            dy = 0.0
+
+        pinch = pose["pinch_active"]
+        fist = pose["fist_active"]
+
+        if pinch:
+            scene_state.rotation_y += dx * 200
+            scene_state.current_gesture = "ROTATE"
+        elif fist:
+            scene_state.frozen = True
+            scene_state.current_gesture = "FIST"
+        elif not pinch and not fist and pose["avg_curl"] < 0.2:
+            new_scale = scene_state.scale + dy * 3
+            scene_state.scale = max(0.5, min(3.0, new_scale))
+            scene_state.current_gesture = "ZOOM"
+
     def _process_frame(self, frame):
         """Process a single frame for gesture detection."""
         if self.use_tasks_api and self.hand_landmarker:
@@ -387,6 +441,8 @@ class GestureEngine:
                     features = self._extract_features(norm)
                     # 4. Centre, deltas, orientation → store pose
                     self._compute_and_store_pose(smoothed, features, 1.0)
+                    # 5. Update shared SceneState with gesture-driven transforms
+                    self._apply_gesture_to_scene(self.get_hand_pose())
             else:
                 # No hand visible — reset all smoothing state
                 with self.thread_lock:
