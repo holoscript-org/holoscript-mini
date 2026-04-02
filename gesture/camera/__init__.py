@@ -1,1 +1,1 @@
-"""Camera module for managing video input."""
+"""Camera configuration for video input."""

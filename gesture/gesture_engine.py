@@ -11,7 +11,6 @@ import mediapipe as mp
 import numpy as np
 import time
 import threading
-from collections import deque
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any, List
 from .camera.camera_config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
