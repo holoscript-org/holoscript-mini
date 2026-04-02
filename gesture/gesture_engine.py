@@ -101,6 +101,14 @@ class GestureEngine:
     # ── Minimum confidence to process a detection result ────────────────────
     MIN_CONFIDENCE = 0.60
 
+    # NEW ── Step-navigation constants (POINT mode only) ─────────────────────
+    NAV_LOW_THRESHOLD  = 0.06   # velocity must fall below this to re-arm trigger
+    NAV_HIGH_THRESHOLD = 0.12   # velocity must cross above this to fire a step
+    NAV_ENTRY_BUFFER   = 0.200  # seconds to ignore movement after POINT confirms
+    NAV_COOLDOWN       = 0.400  # seconds lockout after a step fires
+    NAV_AXIS_RATIO     = 1.5    # |dominant| / |other| must exceed this to act
+    NAV_EMA_ALPHA      = 0.4    # nav-specific velocity EMA (spec: 0.4 raw + 0.6 prev)
+
     # ── Palm base landmarks for stable center computation ───────────────────
     _PALM_BASE = [0, 5, 9, 13, 17]   # wrist + 4 MCP joints
 
@@ -204,6 +212,19 @@ class GestureEngine:
         # ── Performance tracking ─────────────────────────────────────────────
         self.fps_counter:    int   = 0
         self.fps_start_time: float = time.time()
+
+        # NEW ── Step-navigation state (POINT mode only) ─────────────────────
+        # Separate EMA velocity tracked independently of the existing _vx/_vy
+        # so ROTATE/ZOOM smoothing is not polluted.
+        self._nav_vx:       float = 0.0   # nav-specific EMA-smoothed vx
+        self._nav_vy:       float = 0.0   # nav-specific EMA-smoothed vy
+        # Entry buffer: time when POINT mode was entered
+        self._nav_entry_time: Optional[float] = None
+        # Rising-edge state: True = velocity was below LOW (trigger is armed)
+        self._nav_armed_x:  bool  = True
+        self._nav_armed_y:  bool  = True
+        # Cooldown: time when last step fired (None = no cooldown active)
+        self._nav_cooldown_until: Optional[float] = None
 
     # ==========================================================================
     # Stage 0 — Frame Timing
@@ -461,6 +482,8 @@ class GestureEngine:
         self._vz = 0.0
         if mode == "FREEZE":
             scene_state.frozen = False
+        if mode == "POINT":            # NEW — clear nav state so next POINT entry starts fresh
+            self._reset_nav_state()
         scene_state.current_gesture = "NONE"
 
     def _on_mode_enter(self, mode: str) -> None:
@@ -590,13 +613,118 @@ class GestureEngine:
             scene_state.frozen          = False
             scene_state.current_gesture = "RESET"
 
-        elif mode == "POINT":
+        elif mode == "POINT":  # MODIFIED — now calls step navigator
             scene_state.frozen          = False
             scene_state.current_gesture = "POINT"
+            self._step_navigate(vx, vy)
 
         else:  # NONE
             scene_state.frozen          = False
             scene_state.current_gesture = "NONE"
+
+    # NEW ── Step Navigation (POINT mode) ────────────────────────────────────
+
+    def _step_navigate(self, vx_raw: float, vy_raw: float) -> None:
+        """Convert hand velocity into discrete navigation steps (POINT mode only).
+
+        Safety systems implemented:
+          1. Entry buffer  — 200 ms silence after POINT is first confirmed.
+          2. Nav-specific EMA  — alpha=0.4 (spec: 0.4*raw + 0.6*prev).
+          3. Dual threshold  — LOW=0.06 arms trigger; HIGH=0.12 fires step.
+          4. Rising-edge detection — only fires on LOW→HIGH crossing.
+          5. Single trigger per movement — re-arms only when |v| < LOW.
+          6. Cooldown  — 400 ms lockout after any step fires.
+          7. Direction disambiguation — |dominant| must be 1.5× |other|.
+          8. Stability check — caller already skips on hand loss (mode=NONE).
+
+        Writes scene_state.nav_event (string) which the renderer reads.
+        """
+        now = time.monotonic()
+
+        # ── 1. Entry buffer ─────────────────────────────────────────────────
+        if self._nav_entry_time is None:
+            # First frame in POINT mode — start the buffer clock, ignore velocity
+            self._nav_entry_time      = now
+            self._nav_armed_x         = True
+            self._nav_armed_y         = True
+            self._nav_cooldown_until  = None
+            self._nav_vx              = 0.0
+            self._nav_vy              = 0.0
+            return
+
+        if (now - self._nav_entry_time) < self.NAV_ENTRY_BUFFER:
+            return   # still inside silence window
+
+        # ── 2. Nav-specific EMA (separate from _vx/_vy used by ROTATE/ZOOM) ─
+        self._nav_vx = self.NAV_EMA_ALPHA * vx_raw + (1.0 - self.NAV_EMA_ALPHA) * self._nav_vx
+        self._nav_vy = self.NAV_EMA_ALPHA * vy_raw + (1.0 - self.NAV_EMA_ALPHA) * self._nav_vy
+
+        nvx = self._nav_vx
+        nvy = self._nav_vy
+        abs_vx = abs(nvx)
+        abs_vy = abs(nvy)
+
+        # ── 5 & 6 combined: re-arm when velocity drops below LOW ─────────────
+        if abs_vx < self.NAV_LOW_THRESHOLD:
+            self._nav_armed_x = True
+        if abs_vy < self.NAV_LOW_THRESHOLD:
+            self._nav_armed_y = True
+
+        # ── 6. Cooldown check ────────────────────────────────────────────────
+        if self._nav_cooldown_until and now < self._nav_cooldown_until:
+            return   # inside post-trigger lockout
+
+        # ── 3 & 4. Dual threshold + rising-edge detection ────────────────────
+        triggered_x = self._nav_armed_x and abs_vx >= self.NAV_HIGH_THRESHOLD
+        triggered_y = self._nav_armed_y and abs_vy >= self.NAV_HIGH_THRESHOLD
+
+        if not triggered_x and not triggered_y:
+            return   # nothing to do
+
+        # ── 7. Direction disambiguation ──────────────────────────────────────
+        # Pick only the dominant axis; discard if neither dominates.
+        if triggered_x and triggered_y:
+            # Both crossed — pick dominant
+            if abs_vx >= abs_vy * self.NAV_AXIS_RATIO:
+                triggered_y = False
+            elif abs_vy >= abs_vx * self.NAV_AXIS_RATIO:
+                triggered_x = False
+            else:
+                return   # ambiguous diagonal — ignore
+        elif triggered_x:
+            # Only x triggered — still verify axis dominates
+            if not (abs_vx >= abs_vy * self.NAV_AXIS_RATIO):
+                return
+        elif triggered_y:
+            if not (abs_vy >= abs_vx * self.NAV_AXIS_RATIO):
+                return
+
+        # ── Determine direction and emit event ───────────────────────────────
+        if triggered_x:
+            event = "NEXT" if nvx > 0 else "PREV"
+            self._nav_armed_x = False   # 5. disarm until velocity drops below LOW
+        else:
+            event = "DOWN" if nvy > 0 else "UP"
+            self._nav_armed_y = False
+
+        # ── 6. Start cooldown ────────────────────────────────────────────────
+        self._nav_cooldown_until = now + self.NAV_COOLDOWN
+
+        # ── Write to SceneState ──────────────────────────────────────────────
+        scene_state.nav_event = event
+        print(f"[NAV] {event}  (nvx={nvx:+.3f}  nvy={nvy:+.3f})")
+
+    # ── Navigation state reset (called by _on_mode_exit) ────────────────────
+    def _reset_nav_state(self) -> None:
+        """Clear all nav timing state when leaving POINT mode."""
+        self._nav_entry_time     = None
+        self._nav_armed_x        = True
+        self._nav_armed_y        = True
+        self._nav_cooldown_until = None
+        self._nav_vx             = 0.0
+        self._nav_vy             = 0.0
+
+    # ── End NEW ───────────────────────────────────────────────────────────────
 
     # ==========================================================================
     # Hand-Loss Handler

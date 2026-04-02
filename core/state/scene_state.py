@@ -72,6 +72,7 @@ class SceneState:
         self._frozen: bool = False
         self._current_gesture: str = "NONE"
         self._hand_present: bool = False
+        self._nav_event: str = ""        # NEW: written by gesture engine, consumed by renderer
 
         # Renderer output
         self._current_frame: np.ndarray | None = None
@@ -241,6 +242,37 @@ class SceneState:
         """
         with self._lock:
             self._hand_present = bool(value)
+
+    # NEW ----------------------------------------------------------------
+    # nav_event  — write-once / consume-once navigation step from POINT mode
+    # -------------------------------------------------------------------
+
+    @property
+    def nav_event(self) -> str:
+        """Pending navigation event string set by the gesture engine.
+
+        One of: ``"NEXT"``, ``"PREV"``, ``"UP"``, ``"DOWN"``, or ``""`` (none).
+        Prefer :meth:`consume_nav_event` in the renderer to avoid re-triggering.
+        """
+        with self._lock:
+            return self._nav_event
+
+    @nav_event.setter
+    def nav_event(self, value: str) -> None:
+        """Write a navigation step event (called by gesture engine only)."""
+        with self._lock:
+            self._nav_event = str(value)
+
+    def consume_nav_event(self) -> str:
+        """Atomically read and clear the pending navigation event.
+
+        The renderer should call this once per frame.  Returns the event string
+        (``"NEXT"``, ``"PREV"``, ``"UP"``, ``"DOWN"``) or ``""`` if none pending.
+        """
+        with self._lock:
+            evt = self._nav_event
+            self._nav_event = ""
+            return evt
 
     # ------------------------------------------------------------------
     # current_gesture
