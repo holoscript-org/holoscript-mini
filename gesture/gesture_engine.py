@@ -1,18 +1,35 @@
-"""Gesture Engine for AI hologram system.
+"""
+gesture/gesture_engine.py
+=========================
+9-Stage Gesture Engine for the HoloScript hologram control system.
 
-Provides real-time hand pose tracking using MediaPipe Tasks Vision API.
-Feature extraction layer: palm-size normalisation, exponentially-smoothed
-pinch strength, per-finger curl scores, stable hand centre with motion
-deltas, and wrist orientation vector — all continuous, no state machine.
+Pipeline:
+  Stage 0  Frame timing         — real dt (replaces fixed 33 ms increment)
+  Stage 1  MediaPipe extraction — 21 hand landmarks (unchanged)
+  Stage 2  EMA smoothing        — dt-normalised alpha per-landmark
+  Stage 3  Palm normalisation   — wrist origin, palm-size scale invariance
+  Stage 4  Finger states        — TIP/PIP hysteresis booleans + pinch distance
+  Stage 5  Gesture candidate    — strict priority tree (PINCH→V_SIGN→POINT→OPEN_PALM→FIST)
+  Stage 6  Confirmation window  — per-gesture time debounce (80–300 ms)
+  Stage 7  Velocity             — dt-normalised, EMA-smoothed, dead-zone gated
+  Stage 8  Modal dispatch       — Gesture=Mode, Movement=Action
+  Stage 9  SceneState update    — written every frame, never stale
+
+Threading:
+  GestureEngine runs in a background daemon thread.
+  SceneState (RLock) is the shared blackboard written by this thread.
+  SimpleRenderer reads SceneState on the main thread.
 """
 
 import cv2
 import mediapipe as mp
 import numpy as np
+import math
 import time
 import threading
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any, List
+
 from .camera.camera_config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
 from core.state.scene_state import scene_state
 
@@ -23,30 +40,102 @@ try:
 except ImportError:
     MEDIAPIPE_TASKS_AVAILABLE = False
 
-# Resolve model path relative to this file, then project root as fallback
+# ---------------------------------------------------------------------------
+# Model path resolution
+# ---------------------------------------------------------------------------
 _MODEL_FILENAME = "hand_landmarker.task"
-_MODULE_DIR = Path(__file__).parent
-_MODEL_PATH = next(
-    (str(p) for p in [_MODULE_DIR / _MODEL_FILENAME, _MODULE_DIR.parent / _MODEL_FILENAME]
+_MODULE_DIR     = Path(__file__).parent
+_MODEL_PATH     = next(
+    (str(p) for p in [_MODULE_DIR / _MODEL_FILENAME,
+                       _MODULE_DIR.parent / _MODEL_FILENAME]
      if p.exists()),
-    None
+    None,
 )
 
 
+# ===========================================================================
+# GestureEngine
+# ===========================================================================
+
 class GestureEngine:
-    """Real-time gesture recognition engine using MediaPipe Tasks Vision API."""
-    
-    def __init__(self):
-        """Initialize the gesture engine."""
-        # MediaPipe setup - use new Tasks API
+    """Real-time 9-stage gesture engine using MediaPipe Tasks Vision API."""
+
+    # ── EMA base alphas (calibrated at 30 FPS, dt-normalised at runtime) ──
+    BASE_ALPHA     = 0.7   # landmark position smoothing
+    CENTER_ALPHA   = 0.4   # palm-center position smoothing (lower = stabler)
+    VELOCITY_ALPHA = 0.5   # velocity smoothing (derivatives are noisier)
+
+    # ── Dead zone (normalised image units / second) ─────────────────────────
+    DEAD_ZONE = 0.03
+
+    # ── Control sensitivities ───────────────────────────────────────────────
+    ROTATION_SENSITIVITY = 90.0  # degrees per image-unit / second
+    ZOOM_SENSITIVITY     = 1.5   # scale per image-unit / second
+
+    # ── Scale bounds ────────────────────────────────────────────────────────
+    SCALE_MIN = 0.3
+    SCALE_MAX = 4.0
+
+    # ── Hand-loss grace period (seconds) ───────────────────────────────────
+    HAND_LOSS_GRACE = 0.300
+
+    # ── Confirmation windows per gesture (seconds) ─────────────────────────
+    CONFIRMATION_WINDOWS: Dict[str, float] = {
+        "PINCH":     0.080,
+        "OPEN_PALM": 0.100,
+        "V_SIGN":    0.150,
+        "POINT":     0.150,
+        "FIST":      0.200,
+        "UNKNOWN":   0.300,
+    }
+
+    # ── Finger hysteresis bands (normalised image coords) ───────────────────
+    # gap = PIP.y - TIP.y  (positive → finger extended above PIP)
+    FINGER_OPEN_THRESH  =  0.015  # gap must exceed  +0.015 to open
+    FINGER_CLOSE_THRESH = -0.015  # gap must fall below -0.015 to close
+
+    # ── Pinch distance thresholds (normalised palm space) ───────────────────
+    PINCH_ACTIVATE = 0.35   # distance below which pinch activates
+    PINCH_RELEASE  = 0.50   # distance above which pinch releases
+
+    # ── Minimum confidence to process a detection result ────────────────────
+    MIN_CONFIDENCE = 0.60
+
+    # ── Palm base landmarks for stable center computation ───────────────────
+    _PALM_BASE = [0, 5, 9, 13, 17]   # wrist + 4 MCP joints
+
+    # ── (name, TIP_index, PIP_index) for 4 fingers ──────────────────────────
+    _FINGER_DEFS: List[Tuple[str, int, int]] = [
+        ("index",  8,  6),
+        ("middle", 12, 10),
+        ("ring",   16, 14),
+        ("pinky",  20, 18),
+    ]
+
+    # ── Gesture → Mode lookup ────────────────────────────────────────────────
+    _GESTURE_MODE: Dict[str, str] = {
+        "PINCH":     "ROTATE",
+        "OPEN_PALM": "ZOOM",
+        "FIST":      "FREEZE",
+        "V_SIGN":    "RESET",
+        "POINT":     "POINT",
+        "UNKNOWN":   "NONE",
+    }
+
+    # ==========================================================================
+    # Construction
+    # ==========================================================================
+
+    def __init__(self) -> None:
+        # ── MediaPipe setup ──────────────────────────────────────────────────
         self.hand_landmarker = None
-        self.use_tasks_api = False
-        
+        self.use_tasks_api   = False
+
         if MEDIAPIPE_TASKS_AVAILABLE and _MODEL_PATH:
             try:
                 base_options = mp_tasks.BaseOptions(
                     model_asset_path=_MODEL_PATH,
-                    delegate=mp_tasks.BaseOptions.Delegate.CPU
+                    delegate=mp_tasks.BaseOptions.Delegate.CPU,
                 )
                 options = mp_vision.HandLandmarkerOptions(
                     base_options=base_options,
@@ -54,592 +143,810 @@ class GestureEngine:
                     num_hands=1,
                     min_hand_detection_confidence=0.7,
                     min_hand_presence_confidence=0.5,
-                    min_tracking_confidence=0.5
+                    min_tracking_confidence=0.5,
                 )
                 self.hand_landmarker = mp_vision.HandLandmarker.create_from_options(options)
-                self.use_tasks_api = True
+                self.use_tasks_api   = True
                 print(f"Using MediaPipe Tasks Vision API  [{_MODEL_PATH}]")
-            except Exception as e:
-                print(f"Failed to initialize MediaPipe Tasks API: {e}")
-                self.use_tasks_api = False
+            except Exception as exc:
+                print(f"Failed to initialise MediaPipe Tasks API: {exc}")
         elif not _MODEL_PATH:
             print(f"Model '{_MODEL_FILENAME}' not found — using fallback detection")
-        
+
         if not self.use_tasks_api:
             print("Using fallback hand detection")
-        
-        # Camera setup
-        self.cap = None
-        self.running = False
-        self.thread = None
-        self.thread_lock = threading.Lock()
-        
-        # Gesture detection (kept for update_state / get_current_gesture compat)
-        self.current_gesture = None
-        self.gesture_confidence = 0.0
 
-        # Performance tracking
-        self.fps_counter = 0
-        self.fps_start_time = time.time()
+        # ── Camera / threading ───────────────────────────────────────────────
+        self.cap          = None
+        self.running      = False
+        self.thread       = None
+        self.thread_lock  = threading.Lock()
 
-        # Frame timestamp for Tasks API
-        self.frame_timestamp_ms = 0
+        # ── Backward-compat public interface (used by external callers) ──────
+        self.current_gesture:   str   = "NONE"
+        self.gesture_confidence: float = 0.0
+        self._current_pose: Optional[Dict[str, Any]] = None
 
-        # Landmark-level exponential smoothing
+        # ── Frame timing (Stage 0) ───────────────────────────────────────────
+        self.frame_timestamp_ms: int             = 0
+        self._prev_time:         Optional[float] = None
+        self._dt:                float            = 1.0 / 30.0
+
+        # ── Landmark EMA state (Stage 2) ────────────────────────────────────
         self.prev_landmarks = None
-        self.smoothing_alpha = 0.7
-        self._current_pose = None
 
-        # Per-feature smoothing state (reset on hand loss)
-        self._prev_pinch: Optional[float] = None
-        self._prev_avg_curl: Optional[float] = None
-        self._prev_center: Optional[Tuple] = None
+        # ── Per-finger hysteresis states (Stage 4) ───────────────────────────
+        # True = OPEN, False = CLOSED — initialise all closed
+        self._finger_states: Dict[str, bool] = {
+            "thumb": False, "index": False, "middle": False,
+            "ring": False,  "pinky": False,
+        }
+        self._pinch_active: bool = False
 
-        # Motion smoothing for scene updates (Week-3 stability)
-        self.prev_dx: float = 0.0
-        self.prev_dy: float = 0.0
-        self.motion_alpha: float = 0.7
-    
-    def _convert_mediapipe_landmarks(self, landmarks_list) -> List:
-        """Convert MediaPipe Tasks landmarks to legacy format for compatibility."""
+        # ── Confirmation window state (Stage 6) ──────────────────────────────
+        self._confirmed_candidate:  str            = "UNKNOWN"
+        self._candidate_start_time: Optional[float] = None
+        self._active_gesture:       str            = "UNKNOWN"
+
+        # ── Modal control state (Stage 8) ────────────────────────────────────
+        self._active_mode:     str   = "NONE"
+        self._freeze_snapshot: float = 0.0
+
+        # ── Velocity state (Stage 7) ─────────────────────────────────────────
+        self._prev_center: Optional[Tuple[float, float, float]] = None
+        self._vx: float = 0.0
+        self._vy: float = 0.0
+        self._vz: float = 0.0
+
+        # ── Hand-loss state ───────────────────────────────────────────────────
+        self._hand_loss_time: Optional[float] = None
+
+        # ── Performance tracking ─────────────────────────────────────────────
+        self.fps_counter:    int   = 0
+        self.fps_start_time: float = time.time()
+
+    # ==========================================================================
+    # Stage 0 — Frame Timing
+    # ==========================================================================
+
+    def _update_dt(self) -> float:
+        """Compute real elapsed time since last frame.
+
+        Returns dt in seconds.  Guard against zero/negative to prevent
+        division-by-zero in velocity and dt-normalised EMA.
+        """
+        now = time.monotonic()
+        if self._prev_time is None:
+            self._prev_time = now
+            return self._dt   # first frame: return default 33 ms
+
+        dt = now - self._prev_time
+        self._prev_time = now
+        self._dt = max(dt, 0.001)   # floor at 1 ms
+        return self._dt
+
+    # ==========================================================================
+    # Stage 1 — Landmark Conversion  (unchanged from original)
+    # ==========================================================================
+
+    def _convert_mediapipe_landmarks(self, landmarks_list) -> Optional[List]:
+        """Convert MediaPipe Tasks landmarks to simple objects with x, y, z."""
         if not landmarks_list or not landmarks_list.hand_landmarks:
             return None
-        
-        # Get first hand landmarks
         hand_landmarks = landmarks_list.hand_landmarks[0]
-        
-        # Convert to legacy format (simple objects with x, y, z attributes)
-        converted_landmarks = []
-        for landmark in hand_landmarks:
-            class LegacyLandmark:
-                def __init__(self, x, y, z=0.0):
-                    self.x = x
-                    self.y = y
-                    self.z = z
-            converted_landmarks.append(LegacyLandmark(landmark.x, landmark.y, getattr(landmark, 'z', 0.0)))
-        
-        return converted_landmarks
-    
-    def _smooth_landmarks(self, current_landmarks):
-        """Apply exponential smoothing across all 21 landmarks.
+        converted = []
+        for lm in hand_landmarks:
+            class _LM:
+                def __init__(self, x, y, z):
+                    self.x = x; self.y = y; self.z = z
+            converted.append(_LM(lm.x, lm.y, getattr(lm, "z", 0.0)))
+        return converted
 
-        Reduces jitter while preserving real-time responsiveness (~30 FPS).
-        alpha=0.7 weights current frame heavily; lower values = more smoothing.
+    # ==========================================================================
+    # Stage 2 — DT-Normalised EMA Landmark Smoothing
+    # ==========================================================================
+
+    def _smooth_landmarks(self, current_landmarks, dt: float):
+        """Apply dt-normalised exponential moving average to all 21 landmarks.
+
+        alpha = BASE_ALPHA ^ (dt * 30)
+        At 30 FPS: alpha = 0.7   (standard behaviour)
+        At 15 FPS: alpha ≈ 0.49  (less smoothing — compensates for longer dt)
+        At 60 FPS: alpha ≈ 0.84  (more smoothing — compensates for shorter dt)
         """
+        alpha = self.BASE_ALPHA ** (dt * 30.0)
+
         if (self.prev_landmarks is None
                 or len(self.prev_landmarks) != len(current_landmarks)):
             self.prev_landmarks = current_landmarks
             return current_landmarks
 
-        alpha = self.smoothing_alpha
         smoothed = []
         for curr, prev in zip(current_landmarks, self.prev_landmarks):
-            class _SmoothedLM:
+            class _S:
                 pass
-            lm = _SmoothedLM()
+            lm = _S()
             lm.x = alpha * curr.x + (1.0 - alpha) * prev.x
             lm.y = alpha * curr.y + (1.0 - alpha) * prev.y
-            lm.z = alpha * getattr(curr, 'z', 0.0) + (1.0 - alpha) * getattr(prev, 'z', 0.0)
+            lm.z = alpha * curr.z + (1.0 - alpha) * prev.z
             smoothed.append(lm)
 
         self.prev_landmarks = smoothed
         return smoothed
 
-    def _initialize_camera(self) -> bool:
-        """Initialize camera capture."""
-        try:
-            self.cap = cv2.VideoCapture(CAMERA_INDEX)
-            if not self.cap.isOpened():
-                raise RuntimeError(f"Failed to open camera at index {CAMERA_INDEX}")
-            
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
-            
-            actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            print(f"Camera initialized: {actual_width}x{actual_height}")
-            return True
-            
-        except Exception as e:
-            print(f"Camera initialization failed: {e}")
-            return False
-    
-    def _normalize_landmarks(self, landmarks):
-        """Translate landmarks to wrist origin and scale by palm size.
+    # ==========================================================================
+    # Stage 3 — Palm Normalisation (unchanged logic, kept as separate method)
+    # ==========================================================================
 
-        Removes position and scale variation so features are hand-size invariant.
-        Wrist (landmark 0) becomes (0, 0, 0) after translation.
-        Palm size = distance from wrist to middle MCP (landmark 9).
+    def _normalize_landmarks(self, landmarks):
+        """Translate to wrist origin and scale by wrist→middle-MCP distance.
+
+        After normalisation:
+          LM0 (wrist)      = (0, 0, 0)
+          LM9 (middle MCP) ≈ (0, 1, 0)  — 1 palm-size away
+          Extended fingertips ≈ 2.5–3.0 palm-sizes from origin
+          Curled fingertips  ≈ 0.5–1.0 palm-sizes from origin
         """
-        wrist = landmarks[0]
+        wrist      = landmarks[0]
         middle_mcp = landmarks[9]
-        palm_size = np.sqrt(
-            (middle_mcp.x - wrist.x) ** 2
-            + (middle_mcp.y - wrist.y) ** 2
-            + (getattr(middle_mcp, 'z', 0.0) - getattr(wrist, 'z', 0.0)) ** 2
+        palm_size  = math.sqrt(
+            (middle_mcp.x - wrist.x) ** 2 +
+            (middle_mcp.y - wrist.y) ** 2 +
+            (middle_mcp.z - wrist.z) ** 2
         )
         if palm_size < 1e-6:
-            palm_size = 1e-6  # guard against degenerate frames
+            palm_size = 1e-6   # guard degenerate frames
 
         norm = []
         for lm in landmarks:
-            class _NormLM:
+            class _N:
                 pass
-            n = _NormLM()
+            n = _N()
             n.x = (lm.x - wrist.x) / palm_size
             n.y = (lm.y - wrist.y) / palm_size
-            n.z = (getattr(lm, 'z', 0.0) - getattr(wrist, 'z', 0.0)) / palm_size
+            n.z = (lm.z - wrist.z) / palm_size
             norm.append(n)
         return norm
 
-    def _extract_features(self, norm_landmarks) -> Dict[str, float]:
-        """Compute continuously-smoothed hand features from palm-normalised landmarks.
+    # ==========================================================================
+    # Stage 4 — Per-Finger State with Hysteresis + Pinch Distance
+    # ==========================================================================
 
-        In normalised space the wrist is at origin, so magnitude of a tip
-        vector equals its distance from the wrist.
+    def _compute_finger_states(self, smoothed_lm, norm_lm) -> None:
+        """Update per-finger boolean states using TIP/PIP hysteresis.
 
-        Pinch smoothing:    pinch  = 0.7 * prev  + 0.3 * current
-        Curl  smoothing:    curl   = 0.7 * prev  + 0.3 * current
-        pinch_active        pinch_strength > 0.75
-        fist_active         avg_curl > 0.85
+        Args:
+            smoothed_lm: Image-space smoothed landmarks (x,y in [0,1]).
+                         Used for TIP vs PIP y-coordinate comparison.
+            norm_lm:     Palm-normalised landmarks (wrist at origin).
+                         Used for pinch distance (scale-invariant).
+
+        Hysteresis rule (index, middle, ring, pinky):
+            gap = PIP.y - TIP.y
+            CLOSED → OPEN  if gap >  FINGER_OPEN_THRESH  (+0.015)
+            OPEN   → CLOSED if gap < FINGER_CLOSE_THRESH  (-0.015)
+            (In image coords y increases downward, so positive gap = tip above PIP)
+
+        Thumb rule (lateral extension after mirror-flip):
+            gap = TIP.x - IP.x
+            Same hysteresis thresholds applied on x-axis.
         """
-        def _mag(lm):
-            return np.sqrt(lm.x ** 2 + lm.y ** 2 + lm.z ** 2)
+        # ── 4 fingers: image-space y comparison ────────────────────────────
+        for name, tip_idx, pip_idx in self._FINGER_DEFS:
+            gap = smoothed_lm[pip_idx].y - smoothed_lm[tip_idx].y
+            if not self._finger_states[name]:        # currently CLOSED
+                if gap > self.FINGER_OPEN_THRESH:
+                    self._finger_states[name] = True   # → OPEN
+            else:                                    # currently OPEN
+                if gap < self.FINGER_CLOSE_THRESH:
+                    self._finger_states[name] = False  # → CLOSED
 
-        def _dist(a, b):
-            return np.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+        # ── Thumb: image-space x comparison ─────────────────────────────────
+        thumb_gap = smoothed_lm[4].x - smoothed_lm[3].x   # TIP.x - IP.x
+        if not self._finger_states["thumb"]:
+            if thumb_gap > self.FINGER_OPEN_THRESH:
+                self._finger_states["thumb"] = True
+        else:
+            if thumb_gap < self.FINGER_CLOSE_THRESH:
+                self._finger_states["thumb"] = False
 
-        # --- Pinch ---
-        raw_dist    = _dist(norm_landmarks[4], norm_landmarks[8])
-        pinch_curr  = 1.0 - float(np.clip(raw_dist, 0.0, 1.0))
-        if self._prev_pinch is None:
-            self._prev_pinch = pinch_curr
-        pinch_strength    = 0.7 * self._prev_pinch + 0.3 * pinch_curr
-        self._prev_pinch  = pinch_strength
-        pinch_active      = pinch_strength > 0.75
+        # ── Pinch: thumb-tip to index-tip distance in normalised palm space ──
+        t, i = norm_lm[4], norm_lm[8]
+        pinch_dist = math.sqrt(
+            (t.x - i.x) ** 2 + (t.y - i.y) ** 2 + (t.z - i.z) ** 2
+        )
+        if not self._pinch_active:
+            if pinch_dist < self.PINCH_ACTIVATE:
+                self._pinch_active = True
+        else:
+            if pinch_dist > self.PINCH_RELEASE:
+                self._pinch_active = False
 
-        # --- Per-finger curl (tip magnitude from wrist origin) ---
-        index_curl  = float(np.clip(1.0 - _mag(norm_landmarks[8]),  0.0, 1.0))
-        middle_curl = float(np.clip(1.0 - _mag(norm_landmarks[12]), 0.0, 1.0))
-        ring_curl   = float(np.clip(1.0 - _mag(norm_landmarks[16]), 0.0, 1.0))
-        pinky_curl  = float(np.clip(1.0 - _mag(norm_landmarks[20]), 0.0, 1.0))
+    # ==========================================================================
+    # Stage 5 — Gesture Priority Tree
+    # ==========================================================================
 
-        avg_curl_curr = (index_curl + middle_curl + ring_curl + pinky_curl) / 4.0
-        if self._prev_avg_curl is None:
-            self._prev_avg_curl = avg_curl_curr
-        avg_curl           = 0.7 * self._prev_avg_curl + 0.3 * avg_curl_curr
-        self._prev_avg_curl = avg_curl
-        fist_active        = avg_curl > 0.85
+    def _classify_gesture(self) -> str:
+        """Return one gesture candidate per frame using strict priority order.
 
-        return {
-            "pinch_strength": pinch_strength,
-            "pinch_active":   pinch_active,
-            "avg_curl":       avg_curl,
-            "fist_active":    fist_active,
-            "index_curl":     index_curl,
-            "middle_curl":    middle_curl,
-            "ring_curl":      ring_curl,
-            "pinky_curl":     pinky_curl,
-        }
-    
-    def _compute_and_store_pose(
-        self,
-        smoothed_landmarks,
-        features: Dict[str, float],
-        confidence: float,
-    ):
-        """Compute stable hand centre, motion deltas, palm orientation, then store.
+        Priority: PINCH → V_SIGN → POINT → OPEN_PALM → FIST → UNKNOWN
 
-        Centre is averaged over the 5 palm-base landmarks (wrist + 4 MCPs) in
-        image space so it is robust to individual finger movement.
-        Smoothing:  center = 0.6 * prev_center + 0.4 * current
-        Deltas are the frame-to-frame displacement of the smoothed centre.
+        Rationale for order:
+          PINCH first — distance-based, unambiguous, highest specificity.
+          V_SIGN before POINT — both require index open; prevents subset match.
+          POINT before OPEN_PALM — 1-finger subset of 4-finger; avoids shadowing.
+          OPEN_PALM before FIST — positive case before catch-all closed case.
+          FIST last named gesture — requires ALL four fingers closed, no partial.
+          UNKNOWN — anything not matching a named shape.
         """
-        if len(smoothed_landmarks) < 21:
+        idx = self._finger_states["index"]
+        mid = self._finger_states["middle"]
+        rng = self._finger_states["ring"]
+        pnk = self._finger_states["pinky"]
+
+        # 1. PINCH — thumb-index distance gate (highest priority)
+        if self._pinch_active:
+            return "PINCH"
+
+        # 2. V_SIGN — index + middle open, ring + pinky closed
+        if idx and mid and not rng and not pnk:
+            return "V_SIGN"
+
+        # 3. POINT — only index open
+        if idx and not mid and not rng and not pnk:
+            return "POINT"
+
+        # 4. OPEN_PALM — all four fingers open
+        if idx and mid and rng and pnk:
+            return "OPEN_PALM"
+
+        # 5. FIST — all four fingers closed
+        if not idx and not mid and not rng and not pnk:
+            return "FIST"
+
+        # 6. UNKNOWN — no named shape matched
+        return "UNKNOWN"
+
+    # ==========================================================================
+    # Stage 6 — Confirmation Window (Time-Based Debounce)
+    # ==========================================================================
+
+    def _apply_confirmation_window(self, candidate: str) -> None:
+        """Promote candidate to active_gesture only after its window elapses.
+
+        State variables:
+          _confirmed_candidate  — gesture currently being timed
+          _candidate_start_time — monotonic time when this candidate first seen
+          _active_gesture       — last fully confirmed gesture (drives control)
+
+        On a NEW candidate: reset timer, keep current active_gesture.
+        On SAME candidate:  accumulate time; if elapsed >= window, confirm it.
+
+        The UNKNOWN window (300 ms) is the longest deliberately — it prevents
+        the active gesture from dropping to NONE during normal hand transitions
+        (which typically pass through ambiguous UNKNOWN states < 200 ms).
+        """
+        now = time.monotonic()
+
+        if candidate != self._confirmed_candidate:
+            # New candidate — restart timer, do not change active gesture yet
+            self._confirmed_candidate  = candidate
+            self._candidate_start_time = now
             return
 
-        # --- Stable centre (palm base landmarks in image space) ---
-        _PALM = [0, 5, 9, 13, 17]
-        cx_curr = sum(smoothed_landmarks[i].x for i in _PALM) / len(_PALM)
-        cy_curr = sum(smoothed_landmarks[i].y for i in _PALM) / len(_PALM)
-        cz_curr = sum(getattr(smoothed_landmarks[i], 'z', 0.0) for i in _PALM) / len(_PALM)
+        # Same candidate — check elapsed time
+        elapsed = now - (self._candidate_start_time or now)
+        window  = self.CONFIRMATION_WINDOWS.get(candidate, 0.300)
+
+        if elapsed >= window and candidate != self._active_gesture:
+            # Confirmed — transition to new mode
+            self._on_mode_exit(self._active_mode)
+            self._active_gesture = candidate
+            new_mode = self._GESTURE_MODE.get(candidate, "NONE")
+            self._active_mode = new_mode
+            self._on_mode_enter(new_mode)
+
+    # ==========================================================================
+    # Mode Transition Events
+    # ==========================================================================
+
+    def _on_mode_exit(self, mode: str) -> None:
+        """Cleanup actions when leaving a mode.
+
+        Always resets velocity history — prevents velocity "kick" on mode entry.
+        FREEZE exit: unfreeze scene (fixes the original one-way freeze bug).
+        """
+        self._vx = 0.0
+        self._vy = 0.0
+        self._vz = 0.0
+        if mode == "FREEZE":
+            scene_state.frozen = False
+        scene_state.current_gesture = "NONE"
+
+    def _on_mode_enter(self, mode: str) -> None:
+        """Initialisation actions when entering a new mode.
+
+        FREEZE: snapshot current rotation so it can be enforced every frame.
+        RESET:  apply reset values once on entry (not repeated per-frame).
+        """
+        if mode == "FREEZE":
+            self._freeze_snapshot = scene_state.rotation_y
+
+        elif mode == "RESET":
+            scene_state.rotation_y = 0.0
+            scene_state.scale      = 1.0
+
+    # ==========================================================================
+    # Stage 7 — Velocity Computation
+    # ==========================================================================
+
+    def _compute_velocity(self, smoothed_lm, dt: float) -> Tuple[float, float, float]:
+        """Compute dt-normalised, EMA-smoothed, dead-zone-gated velocity.
+
+        Center computation:
+          Average of 5 palm-base landmarks [0,5,9,13,17].
+          These landmarks move as a rigid unit, averaging cancels per-point noise.
+          Center is EMA-smoothed with CENTER_ALPHA (0.4) for extra stability.
+
+        Velocity:
+          raw_v = (smoothed_center - prev_center) / dt
+          Dividing by dt makes velocity frame-rate independent.
+
+        Velocity EMA (alpha=0.5):
+          Lower than landmark alpha because derivatives amplify noise.
+
+        Dead zone:
+          |v| < DEAD_ZONE → v = 0.0 (suppresses sub-threshold hand tremor).
+
+        Returns:
+            (vx, vy, vz) — cleaned velocities in image-space units/second.
+        """
+        # ── Palm center (raw) ────────────────────────────────────────────────
+        cx_raw = sum(smoothed_lm[i].x for i in self._PALM_BASE) / len(self._PALM_BASE)
+        cy_raw = sum(smoothed_lm[i].y for i in self._PALM_BASE) / len(self._PALM_BASE)
+        cz_raw = sum(smoothed_lm[i].z for i in self._PALM_BASE) / len(self._PALM_BASE)
 
         if self._prev_center is None:
-            self._prev_center = (cx_curr, cy_curr, cz_curr)
+            self._prev_center = (cx_raw, cy_raw, cz_raw)
+            return 0.0, 0.0, 0.0
 
-        cx = 0.6 * self._prev_center[0] + 0.4 * cx_curr
-        cy = 0.6 * self._prev_center[1] + 0.4 * cy_curr
-        cz = 0.6 * self._prev_center[2] + 0.4 * cz_curr
+        # ── Smooth the center position ───────────────────────────────────────
+        cx = self.CENTER_ALPHA * cx_raw + (1.0 - self.CENTER_ALPHA) * self._prev_center[0]
+        cy = self.CENTER_ALPHA * cy_raw + (1.0 - self.CENTER_ALPHA) * self._prev_center[1]
+        cz = self.CENTER_ALPHA * cz_raw + (1.0 - self.CENTER_ALPHA) * self._prev_center[2]
 
-        dx = cx - self._prev_center[0]
-        dy = cy - self._prev_center[1]
-        dz = cz - self._prev_center[2]
+        # ── Raw velocity (displacement / dt) ────────────────────────────────
+        raw_vx = (cx - self._prev_center[0]) / dt
+        raw_vy = (cy - self._prev_center[1]) / dt
+        raw_vz = (cz - self._prev_center[2]) / dt
+
         self._prev_center = (cx, cy, cz)
 
-        # --- Palm direction: wrist → middle MCP, normalised ---
-        wrist      = smoothed_landmarks[0]
-        middle_mcp = smoothed_landmarks[9]
-        vx = middle_mcp.x - wrist.x
-        vy = middle_mcp.y - wrist.y
-        vz = getattr(middle_mcp, 'z', 0.0) - getattr(wrist, 'z', 0.0)
-        vmag = np.sqrt(vx * vx + vy * vy + vz * vz)
-        if vmag > 1e-6:
-            vx, vy, vz = vx / vmag, vy / vmag, vz / vmag
+        # ── Smooth velocity ──────────────────────────────────────────────────
+        self._vx = self.VELOCITY_ALPHA * self._vx + (1.0 - self.VELOCITY_ALPHA) * raw_vx
+        self._vy = self.VELOCITY_ALPHA * self._vy + (1.0 - self.VELOCITY_ALPHA) * raw_vy
+        self._vz = self.VELOCITY_ALPHA * self._vz + (1.0 - self.VELOCITY_ALPHA) * raw_vz
 
-        pose = {
-            "center":         (cx, cy, cz),
-            "dx":             dx,
-            "dy":             dy,
-            "dz":             dz,
-            "pinch_strength": features["pinch_strength"],
-            "pinch_active":   features["pinch_active"],
-            "avg_curl":       features["avg_curl"],
-            "fist_active":    features["fist_active"],
-            "palm_direction": (vx, vy, vz),
-            "confidence":     confidence,
-        }
+        # ── Dead zone ────────────────────────────────────────────────────────
+        vx = 0.0 if abs(self._vx) < self.DEAD_ZONE else self._vx
+        vy = 0.0 if abs(self._vy) < self.DEAD_ZONE else self._vy
+        vz = 0.0 if abs(self._vz) < self.DEAD_ZONE else self._vz
 
-        label = (
-            "FIST"     if features["fist_active"]  else
-            "GRABBING" if features["pinch_active"] else
-            "OPEN_HAND"
-        )
+        return vx, vy, vz
 
-        with self.thread_lock:
-            self._current_pose     = pose
-            self.current_gesture   = label
-            self.gesture_confidence = confidence
-    
-    def get_current_gesture(self) -> Dict[str, Any]:
-        """Get current stable gesture.
-        
-        Returns:
-            Dict with 'gesture' and 'confidence' keys
+    # ==========================================================================
+    # Stage 8 — Modal Control Dispatch
+    # ==========================================================================
+
+    def _apply_mode_control(self, vx: float, vy: float, dt: float) -> None:
+        """Apply per-frame scene mutations based on active_mode.
+
+        Gesture = Mode (what capability is active).
+        Movement = Action (magnitude and direction within that mode).
+
+        Mode behaviours:
+          ROTATE — vx (horizontal hand velocity) drives rotation_y.
+                   Moving hand LEFT  → negative vx → rotation decreases.
+                   Moving hand RIGHT → positive vx → rotation increases.
+
+          ZOOM   — vy (vertical hand velocity) drives scale.
+                   Moving hand UP   → negative vy (image y decreases upward)
+                   → negate: scale increases (zoom in).
+                   Moving hand DOWN → positive vy → scale decreases (zoom out).
+                   Note: z-depth from palm-center is not reliable in Tasks API
+                   VIDEO mode because z is relative to wrist (rigid sub-motion).
+                   vy is used as the reliable zoom axis.
+
+          FREEZE — enforce freeze_snapshot; prevent any rotation drift.
+                   frozen = True is maintained actively (not just set once).
+
+          RESET  — action already fired in on_mode_enter; per-frame: label only.
+
+          POINT  — reserved; no scene mutation yet.
+
+          NONE   — no mutation; write "NONE" gesture label.
         """
-        with self.thread_lock:
-            return {
-                "gesture": self.current_gesture or "NONE",
-                "confidence": self.gesture_confidence
-            }
+        mode = self._active_mode
 
-    def get_hand_pose(self) -> Optional[Dict[str, Any]]:
-        """Return continuously-updated hand pose data for 3D manipulation.
-
-        Updated every frame (~30 FPS) with no debounce or hold delay.
-        Thread-safe; may be called from any thread while the engine is running.
-
-        Returns:
-            dict::
-
-                {
-                    "center":         (x, y, z)  smoothed palm-base centre (0–1 image space),
-                    "dx":             float — frame-to-frame x displacement of centre,
-                    "dy":             float — frame-to-frame y displacement,
-                    "dz":             float — frame-to-frame z displacement,
-                    "pinch_strength": float [0, 1]  — 1.0 = full pinch (smoothed),
-                    "pinch_active":   bool  — pinch_strength > 0.75,
-                    "avg_curl":       float [0, 1]  — mean 4-finger curl (smoothed),
-                    "fist_active":    bool  — avg_curl > 0.85,
-                    "palm_direction": (vx, vy, vz)  unit vector wrist → middle MCP,
-                    "confidence":     float — detection confidence,
-                }
-
-            None if no hand is currently detected.
-        """
-        with self.thread_lock:
-            return self._current_pose
-    
-    def update_state(self, state_object):
-        """Update external state object with current gesture data.
-        
-        Args:
-            state_object: Object with current_gesture and gesture_confidence attributes
-        """
-        with self.thread_lock:
-            if hasattr(state_object, 'current_gesture'):
-                state_object.current_gesture = self.current_gesture
-            if hasattr(state_object, 'gesture_confidence'):
-                state_object.gesture_confidence = self.gesture_confidence
-    
-    def _apply_gesture_to_scene(self, pose: Optional[Dict[str, Any]]) -> None:
-        """Update SceneState based on the current hand pose.
-
-        Mapping:
-            PINCH (pinch_active)     → rotate  (rotation_y += dx * 200)
-            FIST  (fist_active)      → freeze  (frozen = True)
-            OPEN HAND (neither)      → zoom    (scale clamped to [0.5, 3.0])
-
-        Stability layer (Week-3):
-            - Confidence filter:  drops frames below 0.6 confidence
-            - Motion smoothing:   exponential filter on dx/dy (alpha=0.7)
-            - Dead-zone:          ignores movements smaller than 0.01
-            - Safe zoom:          only zooms when avg_curl < 0.2 (clearly open hand)
-        """
-        if pose is None:
-            return
-
-        # 1. Confidence filter — ignore unstable frames
-        if pose["confidence"] < 0.6:
-            return
-
-        # 2. Exponential smoothing on raw motion deltas
-        dx = self.motion_alpha * pose["dx"] + (1 - self.motion_alpha) * self.prev_dx
-        dy = self.motion_alpha * pose["dy"] + (1 - self.motion_alpha) * self.prev_dy
-        self.prev_dx = dx
-        self.prev_dy = dy
-
-        # 3. Dead-zone — suppress tiny jitter
-        dead_zone = 0.01
-        if abs(dx) < dead_zone:
-            dx = 0.0
-        if abs(dy) < dead_zone:
-            dy = 0.0
-
-        pinch = pose["pinch_active"]
-        fist = pose["fist_active"]
-
-        if pinch:
-            scene_state.rotation_y += dx * 200
+        if mode == "ROTATE":
+            scene_state.rotation_y   += vx * self.ROTATION_SENSITIVITY * dt
+            scene_state.frozen        = False
             scene_state.current_gesture = "ROTATE"
-        elif fist:
-            scene_state.frozen = True
-            scene_state.current_gesture = "FIST"
-        elif not pinch and not fist and pose["avg_curl"] < 0.2:
-            new_scale = scene_state.scale + dy * 3
-            scene_state.scale = max(0.5, min(3.0, new_scale))
+
+        elif mode == "ZOOM":
+            # vy negative = hand moving up = zoom in → negate vy
+            scale_delta = -vy * self.ZOOM_SENSITIVITY * dt
+            new_scale   = scene_state.scale + scale_delta
+            scene_state.scale           = max(self.SCALE_MIN, min(self.SCALE_MAX, new_scale))
+            scene_state.frozen          = False
             scene_state.current_gesture = "ZOOM"
 
-    def _process_frame(self, frame):
-        """Process a single frame for gesture detection."""
-        if self.use_tasks_api and self.hand_landmarker:
-            return self._process_frame_tasks_api(frame)
+        elif mode == "FREEZE":
+            scene_state.rotation_y      = self._freeze_snapshot
+            scene_state.frozen          = True
+            scene_state.current_gesture = "FIST"
+
+        elif mode == "RESET":
+            scene_state.frozen          = False
+            scene_state.current_gesture = "RESET"
+
+        elif mode == "POINT":
+            scene_state.frozen          = False
+            scene_state.current_gesture = "POINT"
+
+        else:  # NONE
+            scene_state.frozen          = False
+            scene_state.current_gesture = "NONE"
+
+    # ==========================================================================
+    # Hand-Loss Handler
+    # ==========================================================================
+
+    def _handle_hand_loss(self) -> None:
+        """Manage state when no hand is detected.
+
+        Grace period (300 ms):
+          Keep active_mode; zero all velocities.
+          Scene becomes static (no drift) but mode is preserved.
+          Allows momentary detection dropouts (partial occlusion) to recover
+          without resetting the user's control mode.
+
+        After grace period:
+          Full reset — mode, smoothing history, finger states, velocity.
+          scene_state.frozen set to False (unfreeze if was frozen).
+        """
+        now = time.monotonic()
+
+        # Mark hand absent immediately
+        scene_state.hand_present    = False
+        scene_state.current_gesture = "NONE"
+
+        if self._hand_loss_time is None:
+            self._hand_loss_time = now
+
+        elapsed = now - self._hand_loss_time
+
+        if elapsed < self.HAND_LOSS_GRACE:
+            # ── Grace period: keep mode, zero velocities ─────────────────────
+            self._vx = 0.0
+            self._vy = 0.0
+            self._vz = 0.0
+            # Apply mode with zero movement → scene freezes at current position
+            self._apply_mode_control(0.0, 0.0, self._dt)
+
         else:
-            return self._process_frame_fallback(frame)
-    
-    def _process_frame_tasks_api(self, frame):
-        """Process frame using MediaPipe Tasks Vision API (VIDEO mode)."""
+            # ── After grace: full reset ──────────────────────────────────────
+            self._on_mode_exit(self._active_mode)
+            self._active_mode            = "NONE"
+            self._active_gesture         = "UNKNOWN"
+            self._confirmed_candidate    = "UNKNOWN"
+            self._candidate_start_time   = None
+            self._hand_loss_time         = None
+            self.prev_landmarks          = None
+            self._prev_center            = None
+            self._vx = self._vy = self._vz = 0.0
+            self._pinch_active = False
+            for key in self._finger_states:
+                self._finger_states[key] = False
+            with self.thread_lock:
+                self._current_pose      = None
+                self.current_gesture    = "NONE"
+                self.gesture_confidence = 0.0
+
+    # ==========================================================================
+    # Main Frame Processing (Tasks API path)
+    # ==========================================================================
+
+    def _process_frame_tasks_api(self, frame: np.ndarray) -> np.ndarray:
+        """Run the full 9-stage pipeline on a single camera frame."""
+
+        # ── Stage 0: real dt ────────────────────────────────────────────────
+        dt = self._update_dt()
+        self.frame_timestamp_ms += int(dt * 1000)
+
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-        self.frame_timestamp_ms += 33  # monotonic ~30 FPS increment
-        #Everything before this prepares the frame.
-        #Everything after this interprets the AI output.
-        #........................................................................................................
+        mp_image  = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+
         try:
-            hand_result = self.hand_landmarker.detect_for_video(mp_image, self.frame_timestamp_ms)
-            
+            hand_result = self.hand_landmarker.detect_for_video(
+                mp_image, self.frame_timestamp_ms
+            )
+
             if hand_result and hand_result.hand_landmarks:
+                # ── Hand detected ─────────────────────────────────────────────
+                self._hand_loss_time    = None        # reset grace period
+                scene_state.hand_present = True
+
                 self._draw_landmarks_on_frame(frame, hand_result)
-                landmarks = self._convert_mediapipe_landmarks(hand_result)
-                if landmarks:
-                    # 1. Exponential landmark smoothing
-                    smoothed = self._smooth_landmarks(landmarks)
-                    # 2. Palm-size normalisation (wrist origin, scale-invariant)
-                    norm = self._normalize_landmarks(smoothed)
-                    # 3. Smoothed pinch + curl features
-                    features = self._extract_features(norm)
-                    # 4. Centre, deltas, orientation → store pose
-                    self._compute_and_store_pose(smoothed, features, 1.0)
-                    # 5. Update shared SceneState with gesture-driven transforms
-                    self._apply_gesture_to_scene(self.get_hand_pose())
-            else:
-                # No hand visible — reset all smoothing state
+
+                # Stage 1: convert
+                raw_lm = self._convert_mediapipe_landmarks(hand_result)
+                if not raw_lm:
+                    return frame
+
+                # Stage 2: dt-normalised EMA smoothing
+                smoothed = self._smooth_landmarks(raw_lm, dt)
+
+                # Stage 3: palm normalisation
+                norm = self._normalize_landmarks(smoothed)
+
+                # Stage 4: finger states + pinch (hysteresis)
+                self._compute_finger_states(smoothed, norm)
+
+                # Stage 5: gesture candidate (priority tree)
+                candidate = self._classify_gesture()
+
+                # Stage 6: confirmation window → sets _active_gesture/_active_mode
+                self._apply_confirmation_window(candidate)
+
+                # Stage 7: velocity (dt-normalised, EMA, dead zone)
+                vx, vy, _vz = self._compute_velocity(smoothed, dt)
+
+                # Stage 8: modal dispatch → writes SceneState
+                self._apply_mode_control(vx, vy, dt)
+
+                # Stage 9: store pose snapshot for external callers
                 with self.thread_lock:
-                    self._current_pose = None
-                    self.prev_landmarks = None
-                self._prev_pinch    = None
-                self._prev_avg_curl = None
-                self._prev_center   = None
-        except Exception as e:
-            print(f"Hand detection error: {e}")
-        
+                    self._current_pose = {
+                        "active_gesture": self._active_gesture,
+                        "active_mode":    self._active_mode,
+                        "candidate":      candidate,
+                        "vx": vx, "vy": vy,
+                        "finger_states":  self._finger_states.copy(),
+                        "pinch_active":   self._pinch_active,
+                    }
+                    self.current_gesture    = self._active_gesture
+                    self.gesture_confidence = 1.0
+
+            else:
+                # ── No hand detected ─────────────────────────────────────────
+                self._handle_hand_loss()
+
+        except Exception as exc:
+            print(f"Hand detection error: {exc}")
+
         return frame
-    
-    def _draw_landmarks_on_frame(self, frame, hand_result):
-        """Draw hand landmarks on the frame."""
+
+    # ==========================================================================
+    # Landmark Visualisation (unchanged)
+    # ==========================================================================
+
+    def _draw_landmarks_on_frame(self, frame: np.ndarray, hand_result) -> None:
+        """Draw MediaPipe landmark dots and finger connections on the camera feed."""
         if not hand_result.hand_landmarks:
             return
-            
-        # Draw landmarks for first hand
         landmarks = hand_result.hand_landmarks[0]
-        
-        # Draw landmark points
-        for landmark in landmarks:
-            x = int(landmark.x * frame.shape[1])
-            y = int(landmark.y * frame.shape[0])
+        for lm in landmarks:
+            x = int(lm.x * frame.shape[1])
+            y = int(lm.y * frame.shape[0])
             cv2.circle(frame, (x, y), 3, (255, 0, 0), -1)
-        
-        # Draw connections (simplified)
+
         connections = [
-            (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
-            (0, 5), (5, 6), (6, 7), (7, 8),  # Index
-            (0, 9), (9, 10), (10, 11), (11, 12),  # Middle
-            (0, 13), (13, 14), (14, 15), (15, 16),  # Ring
-            (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
+            (0,1),(1,2),(2,3),(3,4),
+            (0,5),(5,6),(6,7),(7,8),
+            (0,9),(9,10),(10,11),(11,12),
+            (0,13),(13,14),(14,15),(15,16),
+            (0,17),(17,18),(18,19),(19,20),
         ]
-        
-        for start_idx, end_idx in connections:
-            if start_idx < len(landmarks) and end_idx < len(landmarks):
-                start = landmarks[start_idx]
-                end = landmarks[end_idx]
-                
-                start_point = (int(start.x * frame.shape[1]), int(start.y * frame.shape[0]))
-                end_point = (int(end.x * frame.shape[1]), int(end.y * frame.shape[0]))
-                
-                cv2.line(frame, start_point, end_point, (0, 255, 0), 2)
-    
-    def _process_frame_fallback(self, frame):
-        """Process frame using fallback detection (when Tasks API unavailable)."""
-        # Simple hand detection using color/motion analysis
+        for s, e in connections:
+            if s < len(landmarks) and e < len(landmarks):
+                sp = (int(landmarks[s].x * frame.shape[1]),
+                      int(landmarks[s].y * frame.shape[0]))
+                ep = (int(landmarks[e].x * frame.shape[1]),
+                      int(landmarks[e].y * frame.shape[0]))
+                cv2.line(frame, sp, ep, (0, 255, 0), 2)
+
+    # ==========================================================================
+    # Fallback Detection (no MediaPipe model) — unchanged
+    # ==========================================================================
+
+    def _process_frame_fallback(self, frame: np.ndarray) -> np.ndarray:
+        """Basic contour-based fallback when MediaPipe model is unavailable."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Simple blob detection for demonstration
         _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
         if contours:
-            # Find largest contour (assumed to be hand)
-            largest_contour = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest_contour) > 1000:  # Minimum size threshold
-                
-                # Get bounding box
-                x, y, w, h = cv2.boundingRect(largest_contour)
+            largest = max(contours, key=cv2.contourArea)
+            if cv2.contourArea(largest) > 1000:
+                x, y, w, h = cv2.boundingRect(largest)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                
-                # Create mock landmarks for gesture classification
-                hand_center = (x + w // 2, y + h // 2)
+                center    = (x + w // 2, y + h // 2)
                 hand_size = max(w, h)
-                mock_landmarks = self._create_mock_landmarks(hand_center, hand_size)
-                
-                # Draw simple landmarks
-                for i, landmark in enumerate(mock_landmarks):
-                    px = int(landmark.x * FRAME_WIDTH)
-                    py = int(landmark.y * FRAME_HEIGHT)
-                    cv2.circle(frame, (px, py), 3, (255, 0, 0), -1)
-                
-                # Extract features and update state with mock landmarks (fallback)
-                norm = self._normalize_landmarks(mock_landmarks)
-                features = self._extract_features(norm)
-                self._compute_and_store_pose(mock_landmarks, features, 0.5)
-                
-                # Add text overlay
-                cv2.putText(frame, f"Hand Detected (Fallback Mode)", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
+                mock_lm   = self._create_mock_landmarks(center, hand_size)
+                norm      = self._normalize_landmarks(mock_lm)
+                self._compute_finger_states(mock_lm, norm)
+                candidate = self._classify_gesture()
+                self._apply_confirmation_window(candidate)
+                dt = self._dt
+                vx, vy, _ = self._compute_velocity(mock_lm, dt)
+                self._apply_mode_control(vx, vy, dt)
+                cv2.putText(frame, "Hand Detected (Fallback Mode)",
+                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7, (0, 255, 0), 2)
         return frame
-    
+
     def _create_mock_landmarks(self, hand_center, hand_size):
-        """Create mock landmarks for fallback mode."""
-        landmarks = []
-        
-        # Create 21 mock landmarks in standard MediaPipe format
+        """Generate 21 geometrically-arranged mock landmarks for fallback mode."""
+        lms = []
         for i in range(21):
-            angle = (i / 21) * 2 * np.pi
-            x = hand_center[0] + hand_size * 0.5 * np.cos(angle)
-            y = hand_center[1] + hand_size * 0.5 * np.sin(angle)
-            
-            class MockLandmark:
-                def __init__(self, x, y):
-                    self.x = x / FRAME_WIDTH  # Normalize to 0-1
-                    self.y = y / FRAME_HEIGHT
-                
-            landmarks.append(MockLandmark(x, y))
-        
-        return landmarks
-    
-    def _camera_loop(self):
-        """Main camera processing loop (runs in thread)."""
+            angle = (i / 21) * 2 * math.pi
+            x = hand_center[0] + hand_size * 0.5 * math.cos(angle)
+            y = hand_center[1] + hand_size * 0.5 * math.sin(angle)
+            class _M:
+                def __init__(self, px, py):
+                    self.x = px / FRAME_WIDTH
+                    self.y = py / FRAME_HEIGHT
+                    self.z = 0.0
+            lms.append(_M(x, y))
+        return lms
+
+    # ==========================================================================
+    # Per-Frame Dispatcher (selects Tasks API or Fallback path)
+    # ==========================================================================
+
+    def _process_frame(self, frame: np.ndarray) -> np.ndarray:
+        if self.use_tasks_api and self.hand_landmarker:
+            return self._process_frame_tasks_api(frame)
+        return self._process_frame_fallback(frame)
+
+    # ==========================================================================
+    # Camera Loop
+    # ==========================================================================
+
+    def _camera_loop(self) -> None:
+        """Background thread: capture → process → display at camera frame rate."""
         while self.running:
             ret, frame = self.cap.read()
             if not ret:
                 print("Failed to read frame")
                 break
-            
-            # Flip for mirror effect
-            frame = cv2.flip(frame, 1)
-            
-            # Process frame
+
+            frame = cv2.flip(frame, 1)          # mirror for natural interaction
             frame = self._process_frame(frame)
-            
-            # Display frame
             cv2.imshow("Gesture Engine", frame)
-            
-            # FPS tracking + detection output
+
+            # ── Console diagnostics every 10 frames ─────────────────────────
             self.fps_counter += 1
             if self.fps_counter % 10 == 0:
-                current_time = time.time()
-                elapsed = current_time - self.fps_start_time
-                fps = (10 / elapsed) if elapsed > 0 else 0.0
-                self.fps_start_time = current_time
+                now     = time.time()
+                elapsed = now - self.fps_start_time
+                fps     = 10.0 / elapsed if elapsed > 0 else 0.0
+                self.fps_start_time = now
 
-                pose = self.get_hand_pose()
-                gesture_data = self.get_current_gesture()
+                with self.thread_lock:
+                    pose = self._current_pose
+
                 if pose:
                     print(
                         f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | "
-                        f"gesture={gesture_data['gesture']:<12} conf={gesture_data['confidence']:.2f} | "
-                        f"center=({pose['center'][0]:.3f},{pose['center'][1]:.3f}) | "
-                        f"pinch={pose['pinch_strength']:.3f} {'PINCH' if pose['pinch_active'] else '     '} | "
-                        f"curl={pose['avg_curl']:.3f} {'FIST' if pose['fist_active'] else '    '} | "
-                        f"dx={pose['dx']:+.4f} dy={pose['dy']:+.4f}"
+                        f"mode={pose['active_mode']:<8} "
+                        f"gesture={pose['active_gesture']:<10} "
+                        f"candidate={pose['candidate']:<10} | "
+                        f"pinch={'PINCH' if pose['pinch_active'] else '     '} | "
+                        f"vx={pose['vx']:+.4f} vy={pose['vy']:+.4f}"
                     )
                 else:
-                    print(f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | NO HAND DETECTED")
-            
-            # Check for exit
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print(f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | NO HAND")
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
-    
-    def start(self):
-        """Start gesture recognition (blocking mode - DAY 1)."""
+
+    # ==========================================================================
+    # Camera Initialisation
+    # ==========================================================================
+
+    def _initialize_camera(self) -> bool:
+        try:
+            self.cap = cv2.VideoCapture(CAMERA_INDEX)
+            if not self.cap.isOpened():
+                raise RuntimeError(f"Failed to open camera at index {CAMERA_INDEX}")
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(f"Camera initialised: {actual_w}×{actual_h}")
+            return True
+        except Exception as exc:
+            print(f"Camera initialisation failed: {exc}")
+            return False
+
+    # ==========================================================================
+    # Public API — backward-compatible with existing callers
+    # ==========================================================================
+
+    def get_current_gesture(self) -> Dict[str, Any]:
+        """Thread-safe snapshot of the currently active gesture."""
+        with self.thread_lock:
+            return {
+                "gesture":    self.current_gesture or "NONE",
+                "confidence": self.gesture_confidence,
+            }
+
+    def get_hand_pose(self) -> Optional[Dict[str, Any]]:
+        """Thread-safe snapshot of the full current hand pose.
+
+        Returns None if no hand is currently detected.
+        """
+        with self.thread_lock:
+            return self._current_pose
+
+    def update_state(self, state_object) -> None:
+        """Push gesture state into an external state object (legacy support)."""
+        with self.thread_lock:
+            if hasattr(state_object, "current_gesture"):
+                state_object.current_gesture = self.current_gesture
+            if hasattr(state_object, "gesture_confidence"):
+                state_object.gesture_confidence = self.gesture_confidence
+
+    # ==========================================================================
+    # Lifecycle
+    # ==========================================================================
+
+    def start(self) -> None:
+        """Start gesture recognition in blocking mode (DAY 1 usage)."""
         if not self._initialize_camera():
             return
-        
         self.running = True
         print("Gesture Engine started. Press 'q' to quit.")
-        
         try:
             self._camera_loop()
         except KeyboardInterrupt:
             print("Interrupted by user")
         finally:
             self.stop()
-    
-    def start_thread(self):
-        """Start gesture recognition in background thread (DAY 4)."""
+
+    def start_thread(self) -> None:
+        """Start gesture recognition in a background daemon thread."""
         if self.thread and self.thread.is_alive():
             print("Gesture engine already running")
             return
-        
         if not self._initialize_camera():
             return
-        
         self.running = True
-        self.thread = threading.Thread(target=self._camera_loop, daemon=True)
+        self.thread  = threading.Thread(target=self._camera_loop, daemon=True)
         self.thread.start()
         print("Gesture Engine started in background thread")
-    
-    def stop(self):
-        """Stop gesture recognition and clean up resources."""
+
+    def stop(self) -> None:
+        """Stop recognition and release all resources cleanly."""
         self.running = False
-        
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2.0)
-        
         if self.cap:
             self.cap.release()
-        
-        # Clean up MediaPipe Tasks resources
         if self.use_tasks_api and self.hand_landmarker:
             try:
                 self.hand_landmarker.close()
                 self.hand_landmarker = None
-            except Exception as e:
-                print(f"Error closing hand landmarker: {e}")
-        
+            except Exception as exc:
+                print(f"Error closing hand landmarker: {exc}")
         cv2.destroyAllWindows()
         print("Gesture Engine stopped")
-    
-    def __del__(self):
-        """Cleanup on destruction."""
-        self.stop()
+
+    def __del__(self) -> None:
+        try:
+            self.stop()
+        except Exception:
+            pass

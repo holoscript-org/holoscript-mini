@@ -71,6 +71,7 @@ class SceneState:
         self._explode: float = 0.0
         self._frozen: bool = False
         self._current_gesture: str = "NONE"
+        self._hand_present: bool = False
 
         # Renderer output
         self._current_frame: np.ndarray | None = None
@@ -220,6 +221,26 @@ class SceneState:
         """
         with self._lock:
             self._frozen = bool(value)
+
+    # ------------------------------------------------------------------
+    # hand_present
+    # ------------------------------------------------------------------
+
+    @property
+    def hand_present(self) -> bool:
+        """Whether a hand is currently detected by the Gesture thread."""
+        with self._lock:
+            return self._hand_present
+
+    @hand_present.setter
+    def hand_present(self, value: bool) -> None:
+        """Set hand detection status.
+
+        Args:
+            value: ``True`` if hand detected, ``False`` otherwise.
+        """
+        with self._lock:
+            self._hand_present = bool(value)
 
     # ------------------------------------------------------------------
     # current_gesture
