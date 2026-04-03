@@ -72,7 +72,12 @@ class SceneState:
         self._frozen: bool = False
         self._current_gesture: str = "NONE"
         self._hand_present: bool = False
-        self._nav_event: str = ""        # NEW: written by gesture engine, consumed by renderer
+        self._nav_event: str = ""        # written by gesture engine, consumed by renderer
+
+        # NEW ── PREVIEW / SNAP / FOCUS layer ──────────────────────────────────
+        self._nav_phase: str = "NAV"          # NAV / PREVIEW / FOCUS
+        self._preview_candidate: str = ""     # object highlighted in PREVIEW
+        self._focused_object: str = ""        # object locked in FOCUS
 
         # Renderer output
         self._current_frame: np.ndarray | None = None
@@ -273,6 +278,41 @@ class SceneState:
             evt = self._nav_event
             self._nav_event = ""
             return evt
+
+    # NEW ── nav_phase / preview_candidate / focused_object ──────────────────
+
+    @property
+    def nav_phase(self) -> str:
+        """Interaction phase: ``\"NAV\"``, ``\"PREVIEW\"``, or ``\"FOCUS\"``."""
+        with self._lock:
+            return self._nav_phase
+
+    @nav_phase.setter
+    def nav_phase(self, value: str) -> None:
+        with self._lock:
+            self._nav_phase = str(value)
+
+    @property
+    def preview_candidate(self) -> str:
+        """Object ID currently highlighted in PREVIEW (empty = none)."""
+        with self._lock:
+            return self._preview_candidate
+
+    @preview_candidate.setter
+    def preview_candidate(self, value: str) -> None:
+        with self._lock:
+            self._preview_candidate = str(value)
+
+    @property
+    def focused_object(self) -> str:
+        """Object ID locked in FOCUS (empty = none)."""
+        with self._lock:
+            return self._focused_object
+
+    @focused_object.setter
+    def focused_object(self, value: str) -> None:
+        with self._lock:
+            self._focused_object = str(value)
 
     # ------------------------------------------------------------------
     # current_gesture

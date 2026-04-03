@@ -101,13 +101,22 @@ class GestureEngine:
     # ── Minimum confidence to process a detection result ────────────────────
     MIN_CONFIDENCE = 0.60
 
-    # NEW ── Step-navigation constants (POINT mode only) ─────────────────────
-    NAV_LOW_THRESHOLD  = 0.06   # velocity must fall below this to re-arm trigger
-    NAV_HIGH_THRESHOLD = 0.12   # velocity must cross above this to fire a step
-    NAV_ENTRY_BUFFER   = 0.200  # seconds to ignore movement after POINT confirms
-    NAV_COOLDOWN       = 0.400  # seconds lockout after a step fires
-    NAV_AXIS_RATIO     = 1.5    # |dominant| / |other| must exceed this to act
-    NAV_EMA_ALPHA      = 0.4    # nav-specific velocity EMA (spec: 0.4 raw + 0.6 prev)
+    # MODIFIED ── Directional-lock continuous navigation constants ──────────────
+    NAV_ENTRY_BUFFER    = 0.200  # seconds to ignore movement after POINT confirms
+    NAV_COLLECT_WINDOW  = 0.100  # seconds to accumulate direction signal
+    NAV_LOCK_THRESHOLD  = 0.012  # normalised total displacement to lock direction
+    NAV_AXIS_RATIO      = 1.8    # axis dominance ratio (prevents diagonals)
+    NAV_IDLE_THRESHOLD  = 0.004  # per-frame displacement below which = idle
+    NAV_IDLE_TIMEOUT    = 0.200  # seconds of idle before soft-stop / PREVIEW entry
+    NAV_RELOCK_FACTOR   = 1.5    # relock threshold = NAV_LOCK_THRESHOLD × this
+    NAV_OPPOSITE_DAMP   = 0.2    # damping for opposite-direction movement
+
+    # NEW ── PREVIEW / SNAP / FOCUS constants ───────────────────────────────
+    PSF_RAY_FRAMES       = 6      # frames to average for pointing ray
+    PSF_CANCEL_FACTOR    = 1.5    # cancel threshold = NAV_LOCK_THRESHOLD * this
+    PSF_SNAP_TIMEOUT     = 0.300  # seconds of PREVIEW before auto-FOCUS
+    PSF_NAV_SUPPRESS     = 0.150  # seconds to suppress nav after exiting FOCUS
+    PSF_DEADZONE_ANGLE   = 0.15   # radians: min angular diff between candidates
 
     # ── Palm base landmarks for stable center computation ───────────────────
     _PALM_BASE = [0, 5, 9, 13, 17]   # wrist + 4 MCP joints
@@ -213,18 +222,30 @@ class GestureEngine:
         self.fps_counter:    int   = 0
         self.fps_start_time: float = time.time()
 
-        # NEW ── Step-navigation state (POINT mode only) ─────────────────────
-        # Separate EMA velocity tracked independently of the existing _vx/_vy
-        # so ROTATE/ZOOM smoothing is not polluted.
-        self._nav_vx:       float = 0.0   # nav-specific EMA-smoothed vx
-        self._nav_vy:       float = 0.0   # nav-specific EMA-smoothed vy
-        # Entry buffer: time when POINT mode was entered
-        self._nav_entry_time: Optional[float] = None
-        # Rising-edge state: True = velocity was below LOW (trigger is armed)
-        self._nav_armed_x:  bool  = True
-        self._nav_armed_y:  bool  = True
-        # Cooldown: time when last step fired (None = no cooldown active)
-        self._nav_cooldown_until: Optional[float] = None
+        # MODIFIED ── Directional-lock continuous nav state (POINT mode only) ───
+        self._nav_state:         str            = "IDLE"  # IDLE/COLLECTING/NAVIGATING
+        self._nav_entry_time:    Optional[float] = None   # when POINT mode entered
+        self._nav_anchor_x:      Optional[float] = None   # sliding frame-reference x
+        self._nav_anchor_y:      Optional[float] = None   # sliding frame-reference y
+        self._nav_collect_start: Optional[float] = None   # collection window start
+        self._nav_dx_sum:        float           = 0.0    # accumulated x displacement
+        self._nav_dy_sum:        float           = 0.0    # accumulated y displacement
+        self._nav_direction:     Optional[str]   = None   # RIGHT/LEFT/UP/DOWN
+        self._nav_idle_start:    Optional[float] = None   # when idle was first seen
+        self._nav_is_relocking:  bool            = False  # stronger threshold after pause
+        self._nav_prev_x:        Optional[float] = None   # last frame palm x
+        self._nav_prev_y:        Optional[float] = None   # last frame palm y
+
+        # NEW ── PREVIEW / SNAP / FOCUS state ────────────────────────────────
+        # Exactly one of nav_mode / preview / focus is active at a time.
+        # PSF state never overlaps with the nav state machine.
+        self._psf_phase:          str            = "NAV"   # NAV/PREVIEW/FOCUS
+        self._psf_preview_start:  Optional[float] = None   # when PREVIEW was entered
+        self._psf_ray_buf:        List           = []      # ring buffer of (rx, ry) rays
+        self._psf_cancel_anchor_x: Optional[float] = None  # anchor at PREVIEW entry
+        self._psf_cancel_anchor_y: Optional[float] = None
+        self._psf_nav_suppress_until: Optional[float] = None  # nav suppression after FOCUS
+        self._latest_smoothed_lm = None                    # updated each pipeline frame
 
     # ==========================================================================
     # Stage 0 — Frame Timing
@@ -613,118 +634,296 @@ class GestureEngine:
             scene_state.frozen          = False
             scene_state.current_gesture = "RESET"
 
-        elif mode == "POINT":  # MODIFIED — now calls step navigator
+        elif mode == "POINT":  # MODIFIED ─ nav + PSF tick each frame
             scene_state.frozen          = False
             scene_state.current_gesture = "POINT"
-            self._step_navigate(vx, vy)
+            if self._psf_phase == "FOCUS":
+                # FOCUS mode: intercept PINCH/OPENPALM for focused object
+                # (standard vx/vy already computed; apply to focused context)
+                scene_state.current_gesture = "FOCUS"
+                # Future: route vx/vy to focused_object transforms here
+                # For now: expose focus state; renderer handles visuals
+            else:
+                self._step_navigate(vx, vy)
+            # PSF tick runs regardless of sub-mode
+            if self._prev_center is not None:
+                self._tick_preview_snap(
+                    self._prev_center[0], self._prev_center[1],
+                    time.monotonic()
+                )
 
         else:  # NONE
             scene_state.frozen          = False
             scene_state.current_gesture = "NONE"
 
-    # NEW ── Step Navigation (POINT mode) ────────────────────────────────────
+    # MODIFIED ── Directional-lock continuous navigation (POINT mode) ───────────
 
     def _step_navigate(self, vx_raw: float, vy_raw: float) -> None:
-        """Convert hand velocity into discrete navigation steps (POINT mode only).
+        """Directional-lock continuous navigation (POINT mode only).
 
-        Safety systems implemented:
-          1. Entry buffer  — 200 ms silence after POINT is first confirmed.
-          2. Nav-specific EMA  — alpha=0.4 (spec: 0.4*raw + 0.6*prev).
-          3. Dual threshold  — LOW=0.06 arms trigger; HIGH=0.12 fires step.
-          4. Rising-edge detection — only fires on LOW→HIGH crossing.
-          5. Single trigger per movement — re-arms only when |v| < LOW.
-          6. Cooldown  — 400 ms lockout after any step fires.
-          7. Direction disambiguation — |dominant| must be 1.5× |other|.
-          8. Stability check — caller already skips on hand loss (mode=NONE).
+        State machine:
+          IDLE       — 200 ms entry buffer; ignore all movement.
+          COLLECTING — accumulate per-frame deltas over a 100 ms window.
+                       Locks when one axis dominates by 1.8×.
+                       After idle soft-stop, re-enters with stronger lock threshold.
+          NAVIGATING — emit direction event every active frame via sliding anchor.
+                       Opposite movement is damped (×0.2) not blocked.
+                       Idle for 200 ms → back to COLLECTING (soft-stop / re-lock).
 
-        Writes scene_state.nav_event (string) which the renderer reads.
+        Writes scene_state.nav_event every frame while hand is moving.
         """
         now = time.monotonic()
 
-        # ── 1. Entry buffer ─────────────────────────────────────────────────
-        if self._nav_entry_time is None:
-            # First frame in POINT mode — start the buffer clock, ignore velocity
-            self._nav_entry_time      = now
-            self._nav_armed_x         = True
-            self._nav_armed_y         = True
-            self._nav_cooldown_until  = None
-            self._nav_vx              = 0.0
-            self._nav_vy              = 0.0
+        # Stability gate — skip if palm center not yet computed
+        if self._prev_center is None:
+            return
+        cx = self._prev_center[0]
+        cy = self._prev_center[1]
+
+        # ── IDLE: entry buffer ───────────────────────────────────────────────
+        if self._nav_state == "IDLE":
+            if self._nav_entry_time is None:
+                self._nav_entry_time = now
+            self._nav_prev_x = cx
+            self._nav_prev_y = cy
+            if (now - self._nav_entry_time) < self.NAV_ENTRY_BUFFER:
+                return
+            # Buffer elapsed → begin collecting
+            self._nav_dx_sum       = 0.0
+            self._nav_dy_sum       = 0.0
+            self._nav_collect_start = now
+            self._nav_state        = "COLLECTING"
             return
 
-        if (now - self._nav_entry_time) < self.NAV_ENTRY_BUFFER:
-            return   # still inside silence window
+        # ── COLLECTING: accumulate directional signal ────────────────────────
+        if self._nav_state == "COLLECTING":
+            if self._nav_prev_x is not None:
+                self._nav_dx_sum += cx - self._nav_prev_x
+                self._nav_dy_sum += cy - self._nav_prev_y
+            self._nav_prev_x = cx
+            self._nav_prev_y = cy
 
-        # ── 2. Nav-specific EMA (separate from _vx/_vy used by ROTATE/ZOOM) ─
-        self._nav_vx = self.NAV_EMA_ALPHA * vx_raw + (1.0 - self.NAV_EMA_ALPHA) * self._nav_vx
-        self._nav_vy = self.NAV_EMA_ALPHA * vy_raw + (1.0 - self.NAV_EMA_ALPHA) * self._nav_vy
+            abs_dx = abs(self._nav_dx_sum)
+            abs_dy = abs(self._nav_dy_sum)
+            lock_thr = self.NAV_LOCK_THRESHOLD * (
+                self.NAV_RELOCK_FACTOR if self._nav_is_relocking else 1.0
+            )
 
-        nvx = self._nav_vx
-        nvy = self._nav_vy
-        abs_vx = abs(nvx)
-        abs_vy = abs(nvy)
+            if abs_dx > lock_thr or abs_dy > lock_thr:
+                if abs_dx > abs_dy * self.NAV_AXIS_RATIO:
+                    self._nav_direction    = "RIGHT" if self._nav_dx_sum > 0 else "LEFT"
+                    self._nav_anchor_x     = cx
+                    self._nav_anchor_y     = cy
+                    self._nav_idle_start   = None
+                    self._nav_is_relocking = False
+                    self._nav_state        = "NAVIGATING"
+                    print(f"[NAV] LOCKED {self._nav_direction}")
+                    return
+                elif abs_dy > abs_dx * self.NAV_AXIS_RATIO:
+                    self._nav_direction    = "DOWN" if self._nav_dy_sum > 0 else "UP"
+                    self._nav_anchor_x     = cx
+                    self._nav_anchor_y     = cy
+                    self._nav_idle_start   = None
+                    self._nav_is_relocking = False
+                    self._nav_state        = "NAVIGATING"
+                    print(f"[NAV] LOCKED {self._nav_direction}")
+                    return
+                # else: ambiguous diagonal — keep collecting
 
-        # ── 5 & 6 combined: re-arm when velocity drops below LOW ─────────────
-        if abs_vx < self.NAV_LOW_THRESHOLD:
-            self._nav_armed_x = True
-        if abs_vy < self.NAV_LOW_THRESHOLD:
-            self._nav_armed_y = True
+            # Reset collection window when time expires without a lock
+            if (now - self._nav_collect_start) > self.NAV_COLLECT_WINDOW:
+                self._nav_dx_sum       = 0.0
+                self._nav_dy_sum       = 0.0
+                self._nav_collect_start = now
+            return
 
-        # ── 6. Cooldown check ────────────────────────────────────────────────
-        if self._nav_cooldown_until and now < self._nav_cooldown_until:
-            return   # inside post-trigger lockout
+        # ── NAVIGATING: continuous direction-locked movement ─────────────────
+        if self._nav_anchor_x is None:
+            self._nav_anchor_x = cx
+            self._nav_anchor_y = cy
+            return
 
-        # ── 3 & 4. Dual threshold + rising-edge detection ────────────────────
-        triggered_x = self._nav_armed_x and abs_vx >= self.NAV_HIGH_THRESHOLD
-        triggered_y = self._nav_armed_y and abs_vy >= self.NAV_HIGH_THRESHOLD
+        # Per-frame displacement from sliding anchor
+        dx = cx - self._nav_anchor_x
+        dy = cy - self._nav_anchor_y
 
-        if not triggered_x and not triggered_y:
-            return   # nothing to do
+        # Apply locked direction; damp movement in opposite direction
+        direction = self._nav_direction
+        if direction in ("RIGHT", "LEFT"):
+            on_axis  = (direction == "RIGHT" and dx >= 0) or (direction == "LEFT" and dx <= 0)
+            eff      = dx if on_axis else dx * self.NAV_OPPOSITE_DAMP
+            magnitude = abs(eff)
+        else:  # UP / DOWN
+            on_axis  = (direction == "DOWN" and dy >= 0) or (direction == "UP" and dy <= 0)
+            eff      = dy if on_axis else dy * self.NAV_OPPOSITE_DAMP
+            magnitude = abs(eff)
 
-        # ── 7. Direction disambiguation ──────────────────────────────────────
-        # Pick only the dominant axis; discard if neither dominates.
-        if triggered_x and triggered_y:
-            # Both crossed — pick dominant
-            if abs_vx >= abs_vy * self.NAV_AXIS_RATIO:
-                triggered_y = False
-            elif abs_vy >= abs_vx * self.NAV_AXIS_RATIO:
-                triggered_x = False
-            else:
-                return   # ambiguous diagonal — ignore
-        elif triggered_x:
-            # Only x triggered — still verify axis dominates
-            if not (abs_vx >= abs_vy * self.NAV_AXIS_RATIO):
-                return
-        elif triggered_y:
-            if not (abs_vy >= abs_vx * self.NAV_AXIS_RATIO):
-                return
+        # Slide anchor to current position (per-frame delta scheme)
+        self._nav_anchor_x = cx
+        self._nav_anchor_y = cy
 
-        # ── Determine direction and emit event ───────────────────────────────
-        if triggered_x:
-            event = "NEXT" if nvx > 0 else "PREV"
-            self._nav_armed_x = False   # 5. disarm until velocity drops below LOW
+        # Idle detection → soft stop / PREVIEW entry
+        if magnitude < self.NAV_IDLE_THRESHOLD:
+            if self._nav_idle_start is None:
+                self._nav_idle_start = now
+            elif (now - self._nav_idle_start) >= self.NAV_IDLE_TIMEOUT:
+                # Soft-stop: enter PREVIEW instead of raw COLLECTING transition
+                if self._psf_phase == "NAV":
+                    self._enter_preview(cx, cy, now)
+                else:
+                    # PREVIEW/FOCUS already active — just go back to collecting
+                    self._nav_is_relocking  = True
+                    self._nav_dx_sum        = 0.0
+                    self._nav_dy_sum        = 0.0
+                    self._nav_collect_start = now
+                    self._nav_prev_x        = cx
+                    self._nav_prev_y        = cy
+                    self._nav_state         = "COLLECTING"
+            return  # no nav event while idle
         else:
-            event = "DOWN" if nvy > 0 else "UP"
-            self._nav_armed_y = False
+            self._nav_idle_start = None
 
-        # ── 6. Start cooldown ────────────────────────────────────────────────
-        self._nav_cooldown_until = now + self.NAV_COOLDOWN
+        # Accumulate pointing ray for candidate lock while navigating
+        if self._latest_smoothed_lm is not None:
+            rx, ry = self._get_pointing_ray(self._latest_smoothed_lm)
+            self._psf_ray_buf.append((rx, ry))
+            if len(self._psf_ray_buf) > self.PSF_RAY_FRAMES:
+                self._psf_ray_buf.pop(0)
 
-        # ── Write to SceneState ──────────────────────────────────────────────
-        scene_state.nav_event = event
-        print(f"[NAV] {event}  (nvx={nvx:+.3f}  nvy={nvy:+.3f})")
+        # Emit continuous direction event (only in NAV phase)
+        if self._psf_phase == "NAV":
+            # Honour nav suppression window after FOCUS exit
+            if self._psf_nav_suppress_until and now < self._psf_nav_suppress_until:
+                return
+            _DIR = {"RIGHT": "NEXT", "LEFT": "PREV", "UP": "UP", "DOWN": "DOWN"}
+            scene_state.nav_event = _DIR[direction]
 
     # ── Navigation state reset (called by _on_mode_exit) ────────────────────
     def _reset_nav_state(self) -> None:
-        """Clear all nav timing state when leaving POINT mode."""
-        self._nav_entry_time     = None
-        self._nav_armed_x        = True
-        self._nav_armed_y        = True
-        self._nav_cooldown_until = None
-        self._nav_vx             = 0.0
-        self._nav_vy             = 0.0
+        """Clear all nav + PSF state when leaving POINT mode."""
+        self._nav_state         = "IDLE"
+        self._nav_entry_time    = None
+        self._nav_anchor_x      = None
+        self._nav_anchor_y      = None
+        self._nav_collect_start = None
+        self._nav_dx_sum        = 0.0
+        self._nav_dy_sum        = 0.0
+        self._nav_direction     = None
+        self._nav_idle_start    = None
+        self._nav_is_relocking  = False
+        self._nav_prev_x        = None
+        self._nav_prev_y        = None
+        # NEW ─ reset PSF layer
+        self._psf_phase              = "NAV"
+        self._psf_preview_start      = None
+        self._psf_ray_buf            = []
+        self._psf_cancel_anchor_x    = None
+        self._psf_cancel_anchor_y    = None
+        self._psf_nav_suppress_until = None
+        scene_state.nav_phase        = "NAV"
+        scene_state.preview_candidate = ""
+        scene_state.focused_object    = ""
 
-    # ── End NEW ───────────────────────────────────────────────────────────────
+    # NEW ── PSF helper: get normalised wrist→index-tip direction vector ──────────
+    @staticmethod
+    def _get_pointing_ray(lm) -> tuple:
+        """Return normalised (rx, ry) direction from wrist (LM0) to index tip (LM8)."""
+        wx, wy = lm[0].x, lm[0].y
+        ix, iy = lm[8].x, lm[8].y
+        dx, dy = ix - wx, iy - wy
+        length = math.sqrt(dx * dx + dy * dy) or 1e-6
+        return dx / length, dy / length
+
+    # NEW ── PSF helper: enter PREVIEW state ──────────────────────────────────
+    def _enter_preview(self, cx: float, cy: float, now: float) -> None:
+        """Transition NAV → PREVIEW. Lock candidate from averaged ray buffer."""
+        # Compute averaged pointing ray from last N frames
+        candidate = ""
+        if self._psf_ray_buf:
+            avg_rx = sum(r[0] for r in self._psf_ray_buf) / len(self._psf_ray_buf)
+            avg_ry = sum(r[1] for r in self._psf_ray_buf) / len(self._psf_ray_buf)
+            # Expose as direction hint; concrete object selection is renderer-side
+            # Encode as "RAY:rx,ry" so renderer can do spatial hit-testing
+            candidate = f"RAY:{avg_rx:+.4f},{avg_ry:+.4f}"
+
+        self._psf_phase             = "PREVIEW"
+        self._psf_preview_start     = now
+        self._psf_cancel_anchor_x   = cx
+        self._psf_cancel_anchor_y   = cy
+        # Transition nav state machine to COLLECTING (relock after preview)
+        self._nav_is_relocking  = True
+        self._nav_dx_sum        = 0.0
+        self._nav_dy_sum        = 0.0
+        self._nav_collect_start = now
+        self._nav_prev_x        = cx
+        self._nav_prev_y        = cy
+        self._nav_state         = "COLLECTING"
+
+        scene_state.nav_phase         = "PREVIEW"
+        scene_state.preview_candidate = candidate
+        print(f"[PSF] PREVIEW  candidate={candidate}")
+
+    # NEW ── PSF per-frame tick: called every frame in POINT mode ──────────────
+    def _tick_preview_snap(self, cx: float, cy: float, now: float) -> None:
+        """Drive PREVIEW and FOCUS state each frame (only called in POINT mode)."""
+        if self._psf_phase == "NAV":
+            return  # nothing to do; nav state machine handles everything
+
+        if self._psf_phase == "PREVIEW":
+            # ─ Cancel: movement exceeds threshold ─────────────────────────
+            if self._psf_cancel_anchor_x is not None:
+                mv = math.sqrt(
+                    (cx - self._psf_cancel_anchor_x) ** 2 +
+                    (cy - self._psf_cancel_anchor_y) ** 2
+                )
+                cancel_thr = self.NAV_LOCK_THRESHOLD * self.PSF_CANCEL_FACTOR
+                if mv > cancel_thr:
+                    # Cancel preview → return to NAV
+                    self._psf_phase = "NAV"
+                    self._nav_is_relocking = True
+                    self._nav_dx_sum = 0.0
+                    self._nav_dy_sum = 0.0
+                    self._nav_collect_start = now
+                    self._nav_prev_x = cx
+                    self._nav_prev_y = cy
+                    self._nav_state  = "COLLECTING"
+                    scene_state.nav_phase         = "NAV"
+                    scene_state.preview_candidate = ""
+                    print("[PSF] PREVIEW cancelled (movement)")
+                    return
+
+            # ─ Snap: still idle for PSF_SNAP_TIMEOUT ──────────────────────
+            if (now - self._psf_preview_start) >= self.PSF_SNAP_TIMEOUT:
+                focused = scene_state.preview_candidate
+                self._psf_phase = "FOCUS"
+                scene_state.nav_phase      = "FOCUS"
+                scene_state.focused_object = focused
+                print(f"[PSF] FOCUS  object={focused}")
+            return
+
+        if self._psf_phase == "FOCUS":
+            # FOCUS mode: navigation disabled; gestures apply to focused_object
+            # Exit FOCUS when hand leaves POINT (handled in _on_mode_exit / _exit_focus)
+            return
+
+    # NEW ── PSF helper: exit FOCUS, return to NAV with suppression window ──────
+    def _exit_focus(self, now: float) -> None:
+        """Transition FOCUS → NAV with a nav suppression window."""
+        self._psf_phase              = "NAV"
+        self._psf_preview_start      = None
+        self._psf_nav_suppress_until = now + self.PSF_NAV_SUPPRESS
+        scene_state.nav_phase         = "NAV"
+        scene_state.preview_candidate = ""
+        scene_state.focused_object    = ""
+        # Reset nav so the 150ms suppression window is honoured
+        self._nav_is_relocking  = True
+        self._nav_dx_sum        = 0.0
+        self._nav_dy_sum        = 0.0
+        self._nav_collect_start = now
+        self._nav_state         = "COLLECTING"
+        print("[PSF] FOCUS exited → NAV")
+
+    # ── End MODIFIED + NEW ────────────────────────────────────────────────────────
 
     # ==========================================================================
     # Hand-Loss Handler
@@ -814,6 +1013,7 @@ class GestureEngine:
 
                 # Stage 2: dt-normalised EMA smoothing
                 smoothed = self._smooth_landmarks(raw_lm, dt)
+                self._latest_smoothed_lm = smoothed  # NEW ─ cache for PSF ray computation
 
                 # Stage 3: palm normalisation
                 norm = self._normalize_landmarks(smoothed)
