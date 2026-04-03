@@ -1,0 +1,67 @@
+{
+    "objects": [
+        {
+            "id": "sun",
+            "type": "sphere",
+            "position": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                1.0,
+                0.84,
+                0.0
+            ],
+            "animation": "none",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.0
+        },
+        {
+            "id": "earth",
+            "type": "sphere",
+            "position": [
+                3.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                0.0,
+                0.4,
+                1.0
+            ],
+            "animation": "orbit",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.5
+        },
+        {
+            "id": "mars",
+            "type": "sphere",
+            "position": [
+                5.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                0.8,
+                0.3,
+                0.1
+            ],
+            "animation": "orbit",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.3
+        }
+    ]
+}
