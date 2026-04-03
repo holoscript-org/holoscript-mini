@@ -11,6 +11,20 @@ OLLAMA_ENDPOINT = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/gener
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
 OLLAMA_TIMEOUT = 300
 
+FALLBACK_SCENE = {
+    "objects": [
+        {
+            "id": "fallback_sphere",
+            "type": "sphere",
+            "position": [0.0, 0.0, 0.0],
+            "color": [1.0, 0.84, 0.0],
+            "animation": "none",
+            "orbit_center": [0.0, 0.0, 0.0],
+            "orbit_speed": 0.0,
+        }
+    ]
+}
+
 
 def _extract_json_from_text(text: str) -> dict | None:
     try:

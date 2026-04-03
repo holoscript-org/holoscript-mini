@@ -1,5 +1,6 @@
 import json
 import sys
+import os
 from dotenv import load_dotenv
 
 # Load environment variables (e.g. OLLAMA_MODEL)
@@ -9,6 +10,7 @@ from voice.recorder import record_audio
 from voice.transcriber import transcribe
 from voice.command_parser import classify_command
 from llm.ollama_client import generate_scene_ollama
+from llm.groq_client import generate_scene
 
 def main():
     print("=== Live Voice-to-Scene Pipeline ===")
@@ -37,13 +39,15 @@ def main():
         sys.exit(0)
     
     # 3. Classify and Generate
-    print("\n[3/4] Processing command with local Ollama...")
+    provider = os.getenv("LLM_PROVIDER", "HYBRID").upper()
+    print(f"\n[3/4] Processing command (Provider: {provider})...")
+    
     intent, cleaned_command = classify_command(text)
     print(f"     => Intent: {intent}")
     print(f"     => Command: {repr(cleaned_command)}")
     
-    # Assuming this is a fresh start, so previous_scene is None
-    scene_data = generate_scene_ollama(cleaned_command, previous_scene=None)
+    # generate_scene internally handles OLLAMA, GEMINI, and HYBRID fallback!
+    scene_data = generate_scene(cleaned_command, intent=intent)
     
     if not scene_data:
         print("\n[!] Failed to pull a valid scene from Ollama.")
