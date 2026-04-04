@@ -1,0 +1,137 @@
+import json
+import os
+import time
+
+import google.generativeai as genai
+from dotenv import load_dotenv
+from pydantic import ValidationError
+
+from llm.scene_schema import SceneSchema
+from llm.prompt_templates import build_system_prompt, build_refinement_prompt
+from llm.provider_config import get_provider
+from llm.ollama_client import generate_scene_ollama
+from llm.context_manager import ContextManager
+from core.utils.logger import get_logger
+
+logger = get_logger("gemini_client")
+
+load_dotenv()
+
+# Shared conversation context — tracks command+scene history across calls
+context_manager = ContextManager()
+
+_MODEL = None
+GEMINI_AVAILABLE = False
+
+try:
+    _API_KEY = os.getenv("GEMINI_API_KEY")
+    if _API_KEY:
+        genai.configure(api_key=_API_KEY)
+        _MODEL = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            generation_config={"response_mime_type": "application/json"},
+        )
+        GEMINI_AVAILABLE = True
+except Exception as e:
+    logger.warning("Setup failed: %s", e)
+
+FALLBACK_SCENE = {
+    "objects": [
+        {
+            "id": "fallback_sphere",
+            "type": "sphere",
+            "position": [0.0, 0.0, 0.0],
+            "color": [1.0, 0.84, 0.0],
+            "animation": "none",
+            "orbit_center": [0.0, 0.0, 0.0],
+            "orbit_speed": 0.0,
+        }
+    ]
+}
+
+
+def _call_gemini(prompt: str) -> str:
+    if not GEMINI_AVAILABLE or _MODEL is None:
+        raise RuntimeError("Gemini not available: GEMINI_API_KEY not set or invalid")
+    response = _MODEL.generate_content(prompt)
+    return response.text
+
+
+def _validate(raw_json: str) -> dict:
+    scene = SceneSchema.model_validate_json(raw_json)
+    return scene.model_dump()
+
+
+def generate_scene_gemini(command: str, previous_scene: dict | None) -> dict:
+    if previous_scene is not None:
+        prompt = build_refinement_prompt(previous_scene, command)
+    else:
+        prompt = f"{build_system_prompt()}\n\nUser command: {command}"
+
+    start = time.perf_counter()
+
+    try:
+        raw = _call_gemini(prompt)
+        scene = _validate(raw)
+        elapsed = time.perf_counter() - start
+        logger.info("latency: %.1fms", elapsed * 1000)
+        return scene
+
+    except ValidationError as first_error:
+        logger.warning("ValidationError on first attempt: %s", first_error)
+
+        correction_prompt = (
+            f"{build_system_prompt()}\n\n"
+            f"User command: {command}\n\n"
+            f"Your previous response failed validation with this error:\n{first_error}\n\n"
+            f"Fix the JSON so it conforms exactly to the schema."
+        )
+
+        try:
+            raw = _call_gemini(correction_prompt)
+            scene = _validate(raw)
+            elapsed = time.perf_counter() - start
+            logger.info("latency (with retry): %.1fms", elapsed * 1000)
+            return scene
+
+        except (ValidationError, Exception) as second_error:
+            logger.error("Second attempt failed: %s. Returning fallback scene.", second_error)
+            return FALLBACK_SCENE
+
+    except Exception as e:
+        logger.error("Unexpected error: %s. Returning fallback scene.", e)
+        return FALLBACK_SCENE
+
+
+def generate_scene(command: str, intent: str = "NEW_SCENE") -> dict:
+    """Generate or refine a scene based on the command and intent.
+
+    NEW_SCENE: ignores history, generates fresh.
+    REFINE: passes the last scene from context_manager as previous_scene.
+    """
+    provider = get_provider()
+    previous_scene = context_manager.last_scene() if intent == "REFINE" else None
+
+    if provider == "GEMINI":
+        result = generate_scene_gemini(command, previous_scene)
+    elif provider == "OLLAMA":
+        raw = generate_scene_ollama(command, previous_scene)
+        result = raw if raw is not None else FALLBACK_SCENE
+    elif provider == "HYBRID":
+        if GEMINI_AVAILABLE:
+            try:
+                result = generate_scene_gemini(command, previous_scene)
+                if result != FALLBACK_SCENE:
+                    context_manager.add(command, result)
+                    return result
+            except Exception as e:
+                logger.warning("Gemini failed: %s. Trying Ollama...", e)
+        else:
+            logger.info("Gemini not available, trying Ollama...")
+        raw = generate_scene_ollama(command, previous_scene)
+        result = raw if raw is not None else FALLBACK_SCENE
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    context_manager.add(command, result)
+    return result
