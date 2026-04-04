@@ -1,6 +1,8 @@
 """Quick threaded demo for new continuous pose tracking."""
 import time, sys
-sys.path.insert(0, 'c:/Users/khush/holoscript-mini')
+from pathlib import Path
+# Add project root to path so we can import the gesture module
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from gesture.gesture_engine import GestureEngine
 
 print("=== THREADED MODE + CONTINUOUS POSE DEMO (Day 2 v2 — full feature extraction) ===")

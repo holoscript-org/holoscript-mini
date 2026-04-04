@@ -22,14 +22,15 @@ try:
 except ImportError:
     MEDIAPIPE_TASKS_AVAILABLE = False
 
-# Resolve model path relative to this file, then project root as fallback
+# Resolve model path: check local 'models' folder, then module dir, then project root
 _MODEL_FILENAME = "hand_landmarker.task"
 _MODULE_DIR = Path(__file__).parent
-_MODEL_PATH = next(
-    (str(p) for p in [_MODULE_DIR / _MODEL_FILENAME, _MODULE_DIR.parent / _MODEL_FILENAME]
-     if p.exists()),
-    None
-)
+_MODEL_SEARCH_PATHS = [
+    _MODULE_DIR / "models" / _MODEL_FILENAME,
+    _MODULE_DIR / _MODEL_FILENAME,
+    _MODULE_DIR.parent / _MODEL_FILENAME
+]
+_MODEL_PATH = next((str(p) for p in _MODEL_SEARCH_PATHS if p.exists()), None)
 
 
 class GestureEngine:

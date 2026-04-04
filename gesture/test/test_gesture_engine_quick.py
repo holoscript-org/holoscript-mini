@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 import time
 
-# Add gesture module to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root to path so we can import the gesture module
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from gesture.gesture_engine import GestureEngine
 
