@@ -15,7 +15,7 @@ class SceneState:
     gesture_confidence: float = 0.0
 
     # === Rendering ===
-    objects: Dict[str, Any] = field(default_factory=dict)
+    objects: list[Dict[str, Any]] = field(default_factory=list)
     rotation_y: float = 0.0
     scale: float = 1.0
     frozen: bool = False

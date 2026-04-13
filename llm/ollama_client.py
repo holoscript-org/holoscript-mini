@@ -8,8 +8,9 @@ from llm.scene_schema import SceneSchema
 from llm.prompt_templates import build_system_prompt, build_refinement_prompt
 
 OLLAMA_ENDPOINT = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3:latest")
 OLLAMA_TIMEOUT = 300
+OLLAMA_WARMUP_TIMEOUT = int(os.getenv("OLLAMA_WARMUP_TIMEOUT", "25"))
 
 FALLBACK_SCENE = {
     "objects": [
@@ -18,6 +19,9 @@ FALLBACK_SCENE = {
             "type": "sphere",
             "position": [0.0, 0.0, 0.0],
             "color": [1.0, 0.84, 0.0],
+            "secondary_color": [1.0, 0.6, 0.0],
+            "size": 1.0,
+            "surface_style": "emissive_glow",
             "animation": "none",
             "orbit_center": [0.0, 0.0, 0.0],
             "orbit_speed": 0.0,
@@ -47,6 +51,7 @@ def _call_ollama(prompt: str) -> str | None:
             "prompt": prompt,
             "stream": False,
             "format": "json",
+            "keep_alive": "10m",
         }
         response = requests.post(OLLAMA_ENDPOINT, json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
@@ -61,6 +66,24 @@ def _call_ollama(prompt: str) -> str | None:
     except Exception as e:
         print(f"[ollama_client] Error calling Ollama: {e}")
         return None
+
+
+def warmup_ollama_model() -> bool:
+    try:
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": "Return {}.",
+            "stream": False,
+            "format": "json",
+            "keep_alive": "10m",
+        }
+        response = requests.post(OLLAMA_ENDPOINT, json=payload, timeout=OLLAMA_WARMUP_TIMEOUT)
+        response.raise_for_status()
+        print(f"[ollama_client] Warmed up model: {OLLAMA_MODEL}")
+        return True
+    except Exception as e:
+        print(f"[ollama_client] Warmup failed for {OLLAMA_MODEL}: {e}")
+        return False
 
 
 def _validate(raw_json: str) -> dict:

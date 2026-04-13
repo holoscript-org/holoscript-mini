@@ -25,6 +25,9 @@ FALLBACK_SCENE = {
             "type": "sphere",
             "position": [0.0, 0.0, 0.0],
             "color": [1.0, 0.84, 0.0],
+            "secondary_color": [1.0, 0.6, 0.0],
+            "size": 1.0,
+            "surface_style": "emissive_glow",
             "animation": "none",
             "orbit_center": [0.0, 0.0, 0.0],
             "orbit_speed": 0.0,
@@ -57,7 +60,9 @@ def _call_groq(prompt: str) -> str:
         "messages": [
             {"role": "system", "content": "You are a scene generator. You must output strict, valid JSON. Do not write markdown blocks."},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"}
     }
     
     response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
@@ -80,11 +85,36 @@ def generate_scene_groq(command: str, previous_scene: dict | None) -> dict:
         raw = _call_groq(prompt)
         json_obj = _extract_json_from_text(raw)
         if not json_obj:
-            raise ValueError("No JSON found in Groq response.")
+            raise ValueError(f"No JSON found in Groq response. Raw response was: {raw[:300]!r}")
         scene = _validate(json.dumps(json_obj))
         elapsed = time.perf_counter() - start
         logger.info("Groq latency: %.1fms", elapsed * 1000)
         return scene
+
+    except ValidationError as first_error:
+        logger.warning("Groq validation failed on first attempt: %s", first_error)
+
+        correction_prompt = (
+            f"{build_system_prompt()}\n\n"
+            f"User command: {command}\n\n"
+            f"Your previous response failed validation with this error:\n{first_error}\n\n"
+            "Return corrected JSON that includes all required fields for every object."
+        )
+
+        try:
+            raw = _call_groq(correction_prompt)
+            json_obj = _extract_json_from_text(raw)
+            if not json_obj:
+                raise ValueError(f"No JSON found in Groq correction response. Raw response was: {raw[:300]!r}")
+
+            scene = _validate(json.dumps(json_obj))
+            elapsed = time.perf_counter() - start
+            logger.info("Groq latency (with retry): %.1fms", elapsed * 1000)
+            return scene
+        except Exception as second_error:
+            logger.error("Groq correction attempt failed: %s", second_error)
+            return FALLBACK_SCENE
+
     except Exception as e:
         logger.error("Groq generation failed: %s", e)
         return FALLBACK_SCENE

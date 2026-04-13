@@ -9,11 +9,29 @@ load_dotenv()
 from voice.recorder import record_audio
 from voice.transcriber import transcribe
 from voice.command_parser import classify_command
-from llm.ollama_client import generate_scene_ollama
+from llm.ollama_client import warmup_ollama_model
 from llm.groq_client import generate_scene
+
+
+def _env_bool(name: str, default: bool = True) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 def main():
     print("=== Live Voice-to-Scene Pipeline ===")
+
+    provider = os.getenv("LLM_PROVIDER", "HYBRID").upper()
+    enable_warmup = _env_bool("OLLAMA_ENABLE_WARMUP", True)
+
+    if enable_warmup and provider in {"OLLAMA", "HYBRID", "GROQ"}:
+        print(f"\n[0/4] Warming up Ollama model: {os.getenv('OLLAMA_MODEL', 'phi3:latest')}...")
+        warmup_ok = warmup_ollama_model()
+        if not warmup_ok:
+            print("[0/4] Warmup skipped/failed. Continuing pipeline...")
+    elif not enable_warmup:
+        print("\n[0/4] Ollama warmup disabled via OLLAMA_ENABLE_WARMUP.")
     
     # 1. Record audio
     duration = 5
@@ -39,14 +57,13 @@ def main():
         sys.exit(0)
     
     # 3. Classify and Generate
-    provider = os.getenv("LLM_PROVIDER", "HYBRID").upper()
     print(f"\n[3/4] Processing command (Provider: {provider})...")
     
     intent, cleaned_command = classify_command(text)
     print(f"     => Intent: {intent}")
     print(f"     => Command: {repr(cleaned_command)}")
     
-    # generate_scene internally handles OLLAMA, GEMINI, and HYBRID fallback!
+    # generate_scene internally handles GROQ, OLLAMA, and HYBRID fallback!
     scene_data = generate_scene(cleaned_command, intent=intent)
     
     if not scene_data:

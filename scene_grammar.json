@@ -10,9 +10,18 @@
             ],
             "color": [
                 1.0,
-                0.84,
+                0.95,
+                0.3
+            ],
+            "secondary_color": [
+                1.0,
+                0.6,
                 0.0
             ],
+            "size": 2.5,
+            "surface_style": "emissive_glow",
+            "bands": null,
+            "ring": null,
             "animation": "none",
             "orbit_center": [
                 0.0,
@@ -30,164 +39,315 @@
                 0.0
             ],
             "color": [
-                0.5,
-                0.5,
-                0.5
+                0.68,
+                0.66,
+                0.63
             ],
+            "secondary_color": [
+                0.5,
+                0.48,
+                0.46
+            ],
+            "size": 0.25,
+            "surface_style": "polar_caps",
+            "bands": null,
+            "ring": null,
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.8
+            "orbit_speed": 1.607
         },
         {
             "id": "venus",
             "type": "sphere",
             "position": [
-                6.0,
+                6.5,
                 0.0,
                 0.0
             ],
             "color": [
-                1.0,
-                0.7,
-                0.0
+                0.9,
+                0.78,
+                0.5
             ],
+            "secondary_color": [
+                0.95,
+                0.88,
+                0.65
+            ],
+            "size": 0.45,
+            "surface_style": "plain",
+            "bands": null,
+            "ring": null,
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.6
+            "orbit_speed": 1.174
         },
         {
             "id": "earth",
             "type": "sphere",
             "position": [
-                8.0,
+                9.0,
                 0.0,
                 0.0
             ],
             "color": [
-                0.0,
-                0.4,
-                1.0
+                0.1,
+                0.35,
+                0.8
             ],
+            "secondary_color": [
+                0.13,
+                0.5,
+                0.18
+            ],
+            "size": 0.5,
+            "surface_style": "earth",
+            "bands": null,
+            "ring": null,
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.5
+            "orbit_speed": 1.0
         },
         {
             "id": "mars",
             "type": "sphere",
             "position": [
-                10.0,
+                11.5,
                 0.0,
                 0.0
             ],
             "color": [
-                0.8,
-                0.3,
-                0.1
+                0.75,
+                0.32,
+                0.12
             ],
+            "secondary_color": [
+                0.92,
+                0.92,
+                0.92
+            ],
+            "size": 0.3,
+            "surface_style": "polar_caps",
+            "bands": null,
+            "ring": null,
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.3
+            "orbit_speed": 0.802
         },
         {
             "id": "jupiter",
             "type": "sphere",
             "position": [
-                12.0,
+                15.5,
                 0.0,
                 0.0
             ],
             "color": [
-                0.0,
-                0.0,
-                1.0
+                0.78,
+                0.62,
+                0.46
             ],
+            "secondary_color": [
+                0.62,
+                0.42,
+                0.28
+            ],
+            "size": 1.2,
+            "surface_style": "banded",
+            "bands": [
+                {
+                    "color": [
+                        0.82,
+                        0.7,
+                        0.55
+                    ],
+                    "width": 0.12
+                },
+                {
+                    "color": [
+                        0.58,
+                        0.38,
+                        0.24
+                    ],
+                    "width": 0.08
+                },
+                {
+                    "color": [
+                        0.85,
+                        0.73,
+                        0.58
+                    ],
+                    "width": 0.1
+                },
+                {
+                    "color": [
+                        0.6,
+                        0.4,
+                        0.26
+                    ],
+                    "width": 0.07
+                },
+                {
+                    "color": [
+                        0.88,
+                        0.76,
+                        0.6
+                    ],
+                    "width": 0.14
+                },
+                {
+                    "color": [
+                        0.55,
+                        0.36,
+                        0.22
+                    ],
+                    "width": 0.06
+                },
+                {
+                    "color": [
+                        0.8,
+                        0.68,
+                        0.52
+                    ],
+                    "width": 0.1
+                },
+                {
+                    "color": [
+                        0.63,
+                        0.44,
+                        0.3
+                    ],
+                    "width": 0.08
+                },
+                {
+                    "color": [
+                        0.84,
+                        0.72,
+                        0.56
+                    ],
+                    "width": 0.12
+                },
+                {
+                    "color": [
+                        0.57,
+                        0.37,
+                        0.23
+                    ],
+                    "width": 0.07
+                },
+                {
+                    "color": [
+                        0.8,
+                        0.68,
+                        0.52
+                    ],
+                    "width": 0.06
+                }
+            ],
+            "ring": null,
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.2
+            "orbit_speed": 0.434
         },
         {
             "id": "saturn",
             "type": "sphere",
             "position": [
-                14.0,
+                20.0,
                 0.0,
                 0.0
             ],
             "color": [
-                0.6,
-                0.6,
-                0.6
+                0.87,
+                0.8,
+                0.58
             ],
+            "secondary_color": [
+                0.75,
+                0.65,
+                0.42
+            ],
+            "size": 1.0,
+            "surface_style": "saturn_rings",
+            "bands": [
+                {
+                    "color": [
+                        0.9,
+                        0.84,
+                        0.64
+                    ],
+                    "width": 0.15
+                },
+                {
+                    "color": [
+                        0.78,
+                        0.7,
+                        0.5
+                    ],
+                    "width": 0.1
+                },
+                {
+                    "color": [
+                        0.92,
+                        0.86,
+                        0.66
+                    ],
+                    "width": 0.18
+                },
+                {
+                    "color": [
+                        0.76,
+                        0.68,
+                        0.48
+                    ],
+                    "width": 0.08
+                },
+                {
+                    "color": [
+                        0.89,
+                        0.82,
+                        0.62
+                    ],
+                    "width": 0.12
+                }
+            ],
+            "ring": {
+                "inner_radius_factor": 1.3,
+                "outer_radius_factor": 2.4,
+                "color": [
+                    0.8,
+                    0.72,
+                    0.55
+                ],
+                "opacity": 0.75
+            },
             "animation": "orbit",
             "orbit_center": [
                 0.0,
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.1
-        },
-        {
-            "id": "uranus",
-            "type": "sphere",
-            "position": [
-                16.0,
-                0.0,
-                0.0
-            ],
-            "color": [
-                0.0,
-                1.0,
-                1.0
-            ],
-            "animation": "orbit",
-            "orbit_center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "orbit_speed": 0.1
-        },
-        {
-            "id": "neptune",
-            "type": "sphere",
-            "position": [
-                18.0,
-                0.0,
-                0.0
-            ],
-            "color": [
-                0.2,
-                0.2,
-                0.9
-            ],
-            "animation": "orbit",
-            "orbit_center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "orbit_speed": 0.1
+            "orbit_speed": 0.323
         }
     ]
 }
