@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Visual confirmation checklist (fill in after manual test):
 # [ ] Window opens at 800x800
 # [ ] Background is near-black (dark blue-black)
@@ -81,6 +82,29 @@
 # [ ] FPS >= 25 during normal operation
 # [ ] No crashes after 120 seconds
 
+# Realistic Visual Checks:
+# [ ] Sun has visible glow/corona around it,
+#     not just a flat sphere
+# [ ] Earth is blue with visible green continent
+#     patches and white polar regions
+# [ ] Mars is orange-red with white polar cap
+#     visible at top and bottom
+# [ ] Jupiter has clearly visible horizontal
+#     brown/tan/cream bands across its surface
+# [ ] Saturn has clearly visible horizontal bands
+#     AND a flat ring system around its equator
+# [ ] Saturn's rings are tilted at an angle
+#     (not perfectly flat to camera)
+# [ ] Uranus is distinctly ice-blue-green,
+#     with subtle banding
+# [ ] Neptune is deeper more saturated blue
+#     than Uranus, with subtle banding
+# [ ] Mercury is small grey sphere
+# [ ] Venus is featureless yellow-amber sphere
+# [ ] All planets still orbit correctly
+# [ ] SPACE freeze still works
+# [ ] FPS still >= 20 with all the extra geometry
+
 """renderer/render_window.py
 Pyglet window and render loop for the HoloScript Renderer — Phase 10 (Final Integration).
 Loads solar system JSON, animates orbits, applies global transforms
@@ -153,6 +177,20 @@ def _make_obj(
 
 
 # ---------------------------------------------------------------------------
+# Default camera (used when a scene JSON has no "camera" block)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CAMERA = {
+    "fov":    65.0,
+    "near":   0.1,
+    "far":    5000.0,
+    "eye":    [13.5, 28.0, 65.0],
+    "target": [13.5,  0.0,  0.0],
+    "up":     [0.0,   1.0,  0.0],
+}
+
+
+# ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
 
@@ -189,6 +227,7 @@ class Renderer:
         self._last_scene_version: int = -1
         self._frame_times: list = []
         self.last_frame_time: float = time.perf_counter()
+        self._camera_config: dict = dict(_DEFAULT_CAMERA)
 
         self.frame_count: int = 0
         self.fps_log: list[float] = []
@@ -203,13 +242,18 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _rebuild_scene(self, scene_json: dict) -> None:
-        """Parse new JSON, replace scene_objects, reset animation clock."""
+        """Parse new JSON, replace scene_objects, reset animation clock, update camera."""
         new_objects = parse_scene(scene_json)
         if not new_objects:
             print("[Renderer] WARNING: parse_scene returned empty list — keeping existing scene.")
             return
         self.scene_objects = new_objects
         self.animator.reset()
+        cam_data = scene_json.get("camera")
+        if cam_data and isinstance(cam_data, dict):
+            self._camera_config = {**_DEFAULT_CAMERA, **cam_data}
+        else:
+            self._camera_config = dict(_DEFAULT_CAMERA)
         msg = f"[Renderer] Scene rebuilt: {len(self.scene_objects)} objects"
         scene_state.append_log(msg)
         print(msg)
@@ -235,16 +279,20 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _setup_camera(self) -> None:
+        cam = self._camera_config
         w, h = self.window.width, self.window.height
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        gluPerspective(60.0, w / h, 0.1, 5000.0)
+        gluPerspective(float(cam["fov"]), w / h, float(cam["near"]), float(cam["far"]))
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
+        eye = cam["eye"]
+        tgt = cam["target"]
+        up  = cam["up"]
         gluLookAt(
-            9, 35, 75,  # eye: pulled back to fit full orbit extents
-            9,  0,  0,  # center: look at scene midpoint
-            0,  1,  0,  # up
+            float(eye[0]), float(eye[1]), float(eye[2]),
+            float(tgt[0]), float(tgt[1]), float(tgt[2]),
+            float(up[0]),  float(up[1]),  float(up[2]),
         )
 
     # ------------------------------------------------------------------
@@ -279,10 +327,10 @@ class Renderer:
             print("[Transforms] Reset to defaults")
         elif symbol == key.S:
             self.frame_extractor._saved_test_frame = False
-            frame = self._last_raw_frame
-            if frame is not None:
-                self.frame_extractor.save_test_frame(frame)
-                print("[Manual] Frame saved via S key")
+            frame = self.frame_extractor.extract()
+            self._last_raw_frame = frame
+            self.frame_extractor.save_test_frame(frame)
+            print("[Manual] Frame saved via S key")
         elif symbol == key.J:
             test_scene = {
                 "objects": [
@@ -303,7 +351,18 @@ class Renderer:
             with open("renderer/assets/solar_system.json", "r") as _f:
                 data = json.load(_f)
             scene_state.scene_json = data
+            scene_state.rotation_y = 0.0
+            scene_state.scale = 1.0
+            scene_state.explode = 0.0
             print("[K key] Reloaded solar system from JSON file")
+        elif symbol == key.H:
+            with open("renderer/assets/human_heart.json", "r") as _f:
+                data = json.load(_f)
+            scene_state.scene_json = data
+            scene_state.rotation_y = 0.0
+            scene_state.scale = 1.0
+            scene_state.explode = 0.0
+            print("[H key] Human heart scene loaded")
         elif symbol == key.V:
             import matplotlib
             matplotlib.use("Agg")
@@ -354,13 +413,20 @@ class Renderer:
         # Apply global scale + rotation to the entire scene
         self.transform_applier.apply_global(rotation_y, scale)
 
+        label_queue = []
         for obj in self.scene_objects:
             # Temporarily shift world_position by explode offset for this draw only
             offset = self.transform_applier.get_explode_offset(obj.world_position, explode)
             original_pos = obj.world_position.copy()
             obj.world_position = original_pos + offset
             primitives.dispatch(obj)
+            # Collect label at the exploded position while it's still set
+            if obj.label:
+                y_off = obj.scale if obj.type == "mesh" else obj.size
+                label_queue.append((obj.label, obj.world_position.copy(), y_off))
             obj.world_position = original_pos  # restore — animation state must not change
+
+        primitives.draw_labels_2d(label_queue, self.window.width, self.window.height)
 
         # FPS tracking
         now = time.perf_counter()
@@ -376,12 +442,16 @@ class Renderer:
             print(f"FPS: {fps:.1f}")
 
         # --- Frame extraction + cylindrical POV ---
-        raw_frame = self.frame_extractor.extract()
-        self.frame_extractor.save_test_frame(raw_frame)
-        self._last_raw_frame = raw_frame
+        # For static scenes (heart), avoid expensive per-frame extraction/build.
+        # Dynamic/orbiting scenes keep full-rate extraction for POV outputs.
+        has_orbits = any(obj.is_orbiting for obj in self.scene_objects)
+        if has_orbits:
+            raw_frame = self.frame_extractor.extract()
+            self.frame_extractor.save_test_frame(raw_frame)
+            self._last_raw_frame = raw_frame
 
-        pov_frame = build_frame_from_scene(self.scene_objects)
-        scene_state.current_frame = pov_frame
+            pov_frame = build_frame_from_scene(self.scene_objects)
+            scene_state.current_frame = pov_frame
 
         if self.frame_count % 25 == 0 and self._frame_times:
             avg_dt = sum(self._frame_times[-25:]) / min(25, len(self._frame_times))

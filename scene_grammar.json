@@ -22,52 +22,10 @@
             "orbit_speed": 0.0
         },
         {
-            "id": "mercury",
-            "type": "sphere",
-            "position": [
-                4.0,
-                0.0,
-                0.0
-            ],
-            "color": [
-                0.5,
-                0.5,
-                0.5
-            ],
-            "animation": "orbit",
-            "orbit_center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "orbit_speed": 0.8
-        },
-        {
-            "id": "venus",
-            "type": "sphere",
-            "position": [
-                6.0,
-                0.0,
-                0.0
-            ],
-            "color": [
-                1.0,
-                0.7,
-                0.0
-            ],
-            "animation": "orbit",
-            "orbit_center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "orbit_speed": 0.6
-        },
-        {
             "id": "earth",
             "type": "sphere",
             "position": [
-                8.0,
+                3.0,
                 0.0,
                 0.0
             ],
@@ -88,7 +46,7 @@
             "id": "mars",
             "type": "sphere",
             "position": [
-                10.0,
+                6.0,
                 0.0,
                 0.0
             ],
@@ -106,16 +64,58 @@
             "orbit_speed": 0.3
         },
         {
+            "id": "mercury",
+            "type": "sphere",
+            "position": [
+                1.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                1.0,
+                1.0,
+                0.0
+            ],
+            "animation": "orbit",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.7
+        },
+        {
+            "id": "venus",
+            "type": "sphere",
+            "position": [
+                4.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                1.0,
+                0.5,
+                0.0
+            ],
+            "animation": "orbit",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.4
+        },
+        {
             "id": "jupiter",
             "type": "sphere",
             "position": [
-                12.0,
+                9.0,
                 0.0,
                 0.0
             ],
             "color": [
                 0.0,
-                0.0,
+                0.5,
                 1.0
             ],
             "animation": "orbit",
@@ -130,14 +130,14 @@
             "id": "saturn",
             "type": "sphere",
             "position": [
-                14.0,
+                11.0,
                 0.0,
                 0.0
             ],
             "color": [
-                0.6,
-                0.6,
-                0.6
+                0.8,
+                0.0,
+                0.8
             ],
             "animation": "orbit",
             "orbit_center": [
@@ -145,20 +145,20 @@
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.1
+            "orbit_speed": 0.15
         },
         {
             "id": "uranus",
             "type": "sphere",
             "position": [
-                16.0,
+                13.0,
                 0.0,
                 0.0
             ],
             "color": [
                 0.0,
                 1.0,
-                1.0
+                0.0
             ],
             "animation": "orbit",
             "orbit_center": [
@@ -172,14 +172,14 @@
             "id": "neptune",
             "type": "sphere",
             "position": [
-                18.0,
+                15.0,
                 0.0,
                 0.0
             ],
             "color": [
-                0.2,
-                0.2,
-                0.9
+                0.0,
+                0.0,
+                1.0
             ],
             "animation": "orbit",
             "orbit_center": [
@@ -187,7 +187,28 @@
                 0.0,
                 0.0
             ],
-            "orbit_speed": 0.1
+            "orbit_speed": 0.05
+        },
+        {
+            "id": "pluto",
+            "type": "sphere",
+            "position": [
+                17.0,
+                0.0,
+                0.0
+            ],
+            "color": [
+                0.5,
+                0.5,
+                0.5
+            ],
+            "animation": "orbit",
+            "orbit_center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "orbit_speed": 0.01
         }
     ]
 }

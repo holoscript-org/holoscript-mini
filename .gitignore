@@ -209,7 +209,12 @@ __marimo__/
 # Renderer test and validation outputs/scripts
 renderer/assets/validation/
 renderer/assets/test*.png
-renderer/verify_phase*.py
+renderer/assets/pov_frame.png
+renderer/assets/test_frame.png
+renderer/assets/test_*.json
+renderer/assets/meshes/test*.obj
+renderer/verify_*.py
+renderer/save_*.py
 renderer/cylindrical/validator.py
 
 /.claude/

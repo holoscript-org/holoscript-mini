@@ -5,8 +5,8 @@ No imports from core/; no knowledge of SceneState.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 import numpy as np
 
@@ -14,7 +14,7 @@ import numpy as np
 # Constants
 # ---------------------------------------------------------------------------
 
-VALID_TYPES = {"sphere", "cube", "cylinder", "ring", "label"}
+VALID_TYPES = {"sphere", "cube", "cylinder", "ring", "label", "mesh"}
 
 
 # ---------------------------------------------------------------------------
@@ -34,25 +34,21 @@ class SceneObject:
     orbit_speed: float
     size: float                 # assigned by default rules
     world_position: np.ndarray  # shape (3,), starts as position.copy()
+    surface_style: str = "plain"
+    secondary_color: tuple = (1.0, 1.0, 1.0)
+    bands: list = None
+    ring: dict = None
+    size_override: float = None
+    mesh_file: Optional[str] = None  # path to .obj file; only used when type == "mesh"
+    scale: float = 1.0               # uniform scale applied to mesh geometry
+    label: Optional[str] = None      # display name; drawn as billboard text if set
 
 
 # ---------------------------------------------------------------------------
 # Size assignment
 # ---------------------------------------------------------------------------
 
-def _assign_size(obj_id: str, obj_type: str) -> float:
-    if obj_id == "sun":
-        return 2.0
-    if obj_id in ("jupiter", "saturn"):
-        return 1.0
-    if obj_id in ("uranus", "neptune"):
-        return 0.8
-    if obj_type == "sphere":
-        return 0.5
-    if obj_type == "cube":
-        return 0.5
-    if obj_type == "cylinder":
-        return 0.5
+def _assign_size(obj_type: str) -> float:
     if obj_type == "ring":
         return 1.0
     if obj_type == "label":
@@ -112,6 +108,26 @@ def parse_scene(scene_dict: dict) -> List[SceneObject]:
         animation = item.get("animation", "none")
         orbit_center_raw = item.get("orbit_center", [0.0, 0.0, 0.0])
         orbit_speed = float(item.get("orbit_speed", 0.0))
+        surface_style = str(item.get("surface_style", "plain"))
+
+        secondary_raw = item.get("secondary_color", [1.0, 1.0, 1.0])
+        try:
+            secondary_color = tuple(float(c) for c in secondary_raw)
+            if len(secondary_color) != 3:
+                raise ValueError("secondary_color must have 3 elements")
+        except Exception:
+            print(f"[scene_parser] WARNING: object '{obj_id}' has invalid secondary_color; using default.")
+            secondary_color = (1.0, 1.0, 1.0)
+
+        bands = item.get("bands")
+        if bands is not None and not isinstance(bands, list):
+            print(f"[scene_parser] WARNING: object '{obj_id}' has non-list bands; ignoring.")
+            bands = None
+
+        ring = item.get("ring")
+        if ring is not None and not isinstance(ring, dict):
+            print(f"[scene_parser] WARNING: object '{obj_id}' has non-dict ring; ignoring.")
+            ring = None
 
         # Array conversions
         position = np.array(position_raw, dtype=float)
@@ -119,8 +135,33 @@ def parse_scene(scene_dict: dict) -> List[SceneObject]:
 
         orbit_radius = float(np.linalg.norm(position - orbit_center))
         is_orbiting = (animation == "orbit")
-        emissive = (obj_id == "sun")
-        size = _assign_size(obj_id, obj_type)
+        size_override = None
+        if "size" in item:
+            try:
+                size_override = float(item.get("size"))
+            except (TypeError, ValueError):
+                print(f"[scene_parser] WARNING: object '{obj_id}' has invalid size override; using defaults.")
+                size_override = None
+
+        size = size_override if size_override is not None else _assign_size(obj_type)
+        emissive = bool(item.get("emissive", False))
+
+        # Mesh-specific fields
+        mesh_file: Optional[str] = None
+        scale: float = 1.0
+        if obj_type == "mesh":
+            mesh_file = item.get("mesh_file")
+            if not mesh_file:
+                print(f"[scene_parser] WARNING: mesh object '{obj_id}' missing 'mesh_file'. Skipping.")
+                continue
+            try:
+                scale = float(item.get("scale", 1.0))
+            except (TypeError, ValueError):
+                print(f"[scene_parser] WARNING: object '{obj_id}' has invalid scale; using 1.0.")
+                scale = 1.0
+
+        label: Optional[str] = item.get("label")
+
         world_position = position.copy()
         color = tuple(float(c) for c in color_raw)
 
@@ -136,6 +177,14 @@ def parse_scene(scene_dict: dict) -> List[SceneObject]:
             orbit_speed=orbit_speed,
             size=size,
             world_position=world_position,
+            surface_style=surface_style,
+            secondary_color=secondary_color,
+            bands=bands,
+            ring=ring,
+            size_override=size_override,
+            mesh_file=mesh_file,
+            scale=scale,
+            label=label,
         ))
 
     return result
