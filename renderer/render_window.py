@@ -118,11 +118,14 @@ pipeline (GL_LIGHTING, gluPerspective, etc.) is available.
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 
 import numpy as np
 import pyglet
 import pyglet.gl as _pgl          # for context config only
+from PIL import Image
 
 from OpenGL.GL import (
     glEnable, glDisable,
@@ -138,6 +141,12 @@ from OpenGL.GL import (
 )
 from OpenGL.GLU import gluPerspective, gluLookAt
 
+# Allow `python renderer/render_window.py` to resolve top-level package imports.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if __package__ in (None, ""):
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+
 import renderer.primitives as primitives
 from renderer.scene_parser import SceneObject, parse_scene
 from renderer.scene_loader import load_scene_from_file
@@ -146,6 +155,7 @@ from renderer.transform_applier import TransformApplier
 from renderer.frame_extractor import FrameExtractor
 from renderer.cylindrical.frame_builder import build_frame_from_scene
 from renderer.scene_state_ref import scene_state
+from core.state.ipc_store import publish_renderer_snapshot, read_scene_command, read_control_command
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +235,17 @@ class Renderer:
         self.frame_extractor = FrameExtractor(self.window.width, self.window.height)
         self._last_raw_frame = None
         self._last_scene_version: int = -1
+        self._last_command_id: int = -1
+        self._last_control_id: int = -1
+        self._needs_frame_refresh: bool = True
+        self._pov_interval_sec: float = 0.14
+        self._last_pov_update: float = 0.0
+        self._preview_path: str = os.path.join(_PROJECT_ROOT, ".runtime", "render_preview.jpg")
+        self._preview_interval_sec: float = 0.07   # ~14 fps writes to disk
+        self._last_preview_write: float = 0.0
+        self._snapshot_interval_sec: float = 0.35
+        self._last_snapshot_publish: float = 0.0
+        os.makedirs(os.path.dirname(self._preview_path), exist_ok=True)
         self._frame_times: list = []
         self.last_frame_time: float = time.perf_counter()
         self._camera_config: dict = dict(_DEFAULT_CAMERA)
@@ -233,6 +254,15 @@ class Renderer:
         self.fps_log: list[float] = []
         self._dt_buf: list[float] = []
         self.last_time: float = time.perf_counter()
+
+        # Ignore stale command files from previous runs so old actions
+        # (e.g. a prior "h") are not replayed on startup.
+        last_scene_cmd = read_scene_command()
+        if last_scene_cmd is not None:
+            self._last_command_id = int(last_scene_cmd["id"])
+        last_ctrl_cmd = read_control_command()
+        if last_ctrl_cmd is not None:
+            self._last_control_id = int(last_ctrl_cmd["id"])
 
         # push_handlers registers both on_draw and on_key_press at full GPU speed
         self.window.push_handlers(self)
@@ -248,6 +278,7 @@ class Renderer:
             print("[Renderer] WARNING: parse_scene returned empty list — keeping existing scene.")
             return
         self.scene_objects = new_objects
+        self._needs_frame_refresh = True
         self.animator.reset()
         cam_data = scene_json.get("camera")
         if cam_data and isinstance(cam_data, dict):
@@ -294,6 +325,24 @@ class Renderer:
             float(tgt[0]), float(tgt[1]), float(tgt[2]),
             float(up[0]),  float(up[1]),  float(up[2]),
         )
+
+    def _save_preview_image(self, raw_frame: np.ndarray) -> None:
+        """Write a compact renderer preview image atomically for FastAPI consumers.
+
+        Kept small (480 px) and low-quality (70) so the write finishes fast
+        enough not to stall the render thread at 14 fps.
+        """
+        try:
+            resampling = getattr(Image, "Resampling", Image)
+            preview = Image.fromarray(raw_frame).resize(
+                (480, 480),
+                resample=resampling.NEAREST,   # faster than BILINEAR for live preview
+            )
+            tmp_path = self._preview_path + ".tmp.jpg"
+            preview.save(tmp_path, format="JPEG", quality=70, optimize=False)
+            os.replace(tmp_path, self._preview_path)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Draw
@@ -387,7 +436,66 @@ class Renderer:
                 plt.close()
                 print(f"[POV] Frame visualization saved to {path}")
 
+    def _apply_control(self, action: str) -> None:
+        """Apply a single GUI keyboard action to this process's scene_state."""
+        if action == "space":
+            scene_state.frozen = not scene_state.frozen
+        elif action == "left":
+            scene_state.rotation_y -= 5.0
+        elif action == "right":
+            scene_state.rotation_y += 5.0
+        elif action == "up":
+            scene_state.scale = min(3.0, scene_state.scale + 0.1)
+        elif action == "down":
+            scene_state.scale = max(0.2, scene_state.scale - 0.1)
+        elif action == "e":
+            scene_state.explode = min(1.0, scene_state.explode + 0.1)
+        elif action == "r":
+            scene_state.explode    = 0.0
+            scene_state.rotation_y = 0.0
+            scene_state.scale      = 1.0
+        elif action == "j":
+            test_scene = {
+                "objects": [
+                    {"id": "sun",      "type": "sphere", "position": [0.0, 0.0, 0.0],
+                     "color": [1.0, 0.84, 0.0], "animation": "none",
+                     "orbit_center": [0.0, 0.0, 0.0], "orbit_speed": 0.0},
+                    {"id": "planet_a", "type": "sphere", "position": [5.0, 0.0, 0.0],
+                     "color": [1.0, 0.0, 0.0], "animation": "orbit",
+                     "orbit_center": [0.0, 0.0, 0.0], "orbit_speed": 1.0},
+                    {"id": "planet_b", "type": "sphere", "position": [9.0, 0.0, 0.0],
+                     "color": [0.0, 0.0, 1.0], "animation": "orbit",
+                     "orbit_center": [0.0, 0.0, 0.0], "orbit_speed": 0.4},
+                ]
+            }
+            scene_state.scene_json = test_scene
+        elif action == "k":
+            with open("renderer/assets/solar_system.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            scene_state.scene_json  = data
+            scene_state.rotation_y  = 0.0
+            scene_state.scale       = 1.0
+            scene_state.explode     = 0.0
+        elif action == "h":
+            with open("renderer/assets/human_heart.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            scene_state.scene_json  = data
+            scene_state.rotation_y  = 0.0
+            scene_state.scale       = 1.0
+            scene_state.explode     = 0.0
+
     def on_draw(self) -> None:
+        command = read_scene_command()
+        if command and command["id"] != self._last_command_id:
+            scene_state.scene_json = command["scene"]
+            self._last_command_id = command["id"]
+            scene_state.append_log("[Renderer] Applied scene command from backend")
+
+        ctrl = read_control_command()
+        if ctrl and ctrl["id"] != self._last_control_id:
+            self._apply_control(ctrl["action"])
+            self._last_control_id = ctrl["id"]
+
         # Atomic read of scene_json + version to detect changes
         with scene_state._lock:
             scene_json = scene_state._scene_json
@@ -445,13 +553,55 @@ class Renderer:
         # For static scenes (heart), avoid expensive per-frame extraction/build.
         # Dynamic/orbiting scenes keep full-rate extraction for POV outputs.
         has_orbits = any(obj.is_orbiting for obj in self.scene_objects)
-        if has_orbits:
+        frame_updated = False
+        now = time.perf_counter()
+        should_force_refresh = self._needs_frame_refresh
+        should_update_pov = should_force_refresh or (
+            has_orbits and (now - self._last_pov_update >= self._pov_interval_sec)
+        )
+        should_update_preview = should_force_refresh or (
+            has_orbits and (now - self._last_preview_write >= self._preview_interval_sec)
+        )
+
+        if should_update_pov or should_update_preview:
             raw_frame = self.frame_extractor.extract()
             self.frame_extractor.save_test_frame(raw_frame)
             self._last_raw_frame = raw_frame
 
-            pov_frame = build_frame_from_scene(self.scene_objects)
-            scene_state.current_frame = pov_frame
+            if should_update_preview:
+                self._save_preview_image(raw_frame)
+                self._last_preview_write = now
+
+            if should_update_pov:
+                pov_frame = build_frame_from_scene(self.scene_objects)
+                scene_state.current_frame = pov_frame
+                frame_updated = True
+                self._last_pov_update = now
+
+            if should_force_refresh:
+                self._needs_frame_refresh = False
+
+        should_publish_snapshot = (now - self._last_snapshot_publish) >= self._snapshot_interval_sec
+        if should_publish_snapshot:
+            try:
+                publish_renderer_snapshot(
+                    scene=scene_state.scene_json,
+                    logs=scene_state.logs,
+                    status={
+                        "rotation_y": rotation_y,
+                        "scale": scale,
+                        "explode": explode,
+                        "frozen": frozen,
+                        "gesture": scene_state.current_gesture,
+                        "transcript": scene_state.transcript,
+                    },
+                    frame=scene_state.current_frame,
+                    frame_updated=frame_updated,
+                )
+                self._last_snapshot_publish = now
+            except Exception:
+                # IPC failure should not crash live rendering.
+                pass
 
         if self.frame_count % 25 == 0 and self._frame_times:
             avg_dt = sum(self._frame_times[-25:]) / min(25, len(self._frame_times))

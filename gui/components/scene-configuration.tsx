@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { HoloPanel } from "./holo-panel"
 
 const initialConfig = {
@@ -99,12 +98,19 @@ function SyntaxHighlighted({ json, depth = 0 }: SyntaxHighlightedProps) {
   )
 }
 
-export function SceneConfiguration() {
-  const [config] = useState(initialConfig)
+interface SceneConfigurationProps {
+  /** Live scene JSON from the backend. When provided, shown instead of demo data. */
+  liveScene?: Record<string, unknown> | null
+}
+
+export function SceneConfiguration({ liveScene }: SceneConfigurationProps) {
+  const config = (liveScene && Object.keys(liveScene).length > 0)
+    ? liveScene
+    : initialConfig
 
   return (
     <HoloPanel title="Scene Configuration" statusIndicator className="h-full">
-      <div className="h-[200px] lg:h-[280px] overflow-auto rounded bg-background/50 p-3 font-mono text-xs leading-relaxed">
+      <div className="h-full min-h-0 overflow-auto rounded bg-background/50 p-3 font-mono text-xs leading-relaxed">
         <pre className="whitespace-pre">
           <SyntaxHighlighted json={config} />
         </pre>

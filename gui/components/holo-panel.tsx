@@ -14,9 +14,9 @@ export function HoloPanel({ title, icon, className, children, statusIndicator }:
   return (
     <div
       className={cn(
-        "relative rounded-lg border border-primary/30 bg-card/80 backdrop-blur-sm overflow-hidden",
+        "relative flex flex-col rounded-lg border border-primary/30 bg-card/90 overflow-hidden",
         "before:absolute before:inset-0 before:rounded-lg before:border before:border-primary/20 before:pointer-events-none",
-        "shadow-[0_0_15px_rgba(0,255,255,0.1),inset_0_1px_0_rgba(0,255,255,0.1)]",
+        "shadow-[0_0_8px_rgba(0,255,255,0.08)]",
         className
       )}
     >
@@ -27,7 +27,7 @@ export function HoloPanel({ title, icon, className, children, statusIndicator }:
       <div className="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary" />
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-primary/20">
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-primary/20">
         {statusIndicator && (
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(0,255,255,0.8)]" />
         )}
@@ -35,8 +35,8 @@ export function HoloPanel({ title, icon, className, children, statusIndicator }:
         <h2 className="text-sm font-mono text-primary tracking-wider uppercase">{title}</h2>
       </div>
 
-      {/* Content */}
-      <div className="p-4">{children}</div>
+      {/* Content — flex-1 + min-h-0 so children that use h-full actually get height */}
+      <div className="flex-1 min-h-0 p-3">{children}</div>
     </div>
   )
 }

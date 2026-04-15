@@ -19,8 +19,10 @@ type GestureType = "PINCH" | "OPEN_PALM" | "FIST" | "POINTING" | "NONE"
 
 export function CameraPanel({
   onGestureDetected,
+  compact = false,
 }: {
   onGestureDetected?: (gesture: GestureType, hands: DetectedHand[]) => void
+  compact?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -28,6 +30,7 @@ export function CameraPanel({
   const [currentGesture, setCurrentGesture] = useState<GestureType>("NONE")
   const [handsDetected, setHandsDetected] = useState(0)
   const animationRef = useRef<number | null>(null)
+  const lastDrawTsRef = useRef(0)
   const streamRef = useRef<MediaStream | null>(null)
 
   // Simulated hand landmarks for demo (in production, use MediaPipe Hands)
@@ -206,7 +209,13 @@ export function CameraPanel({
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    const animate = () => {
+    const animate = (ts: number) => {
+      if (ts - lastDrawTsRef.current < 50) {
+        animationRef.current = requestAnimationFrame(animate)
+        return
+      }
+      lastDrawTsRef.current = ts
+
       // Update canvas size to match video
       if (video.videoWidth && video.videoHeight) {
         canvas.width = video.videoWidth
@@ -236,7 +245,7 @@ export function CameraPanel({
       animationRef.current = requestAnimationFrame(animate)
     }
 
-    animate()
+    animate(0)
 
     return () => {
       if (animationRef.current) {
@@ -285,7 +294,11 @@ export function CameraPanel({
 
   return (
     <HoloPanel title="Gesture Control" statusIndicator className="h-full">
-      <div className="relative aspect-video bg-background/50 rounded overflow-hidden">
+      <div
+        className={`relative bg-background/50 rounded overflow-hidden ${
+          compact ? "h-full min-h-0" : "aspect-video"
+        }`}
+      >
         {/* Video feed */}
         <video
           ref={videoRef}
@@ -305,36 +318,36 @@ export function CameraPanel({
           style={{ transform: "scaleX(-1)" }}
         />
 
-        {/* Placeholder when not streaming */}
+        {/* Placeholder when not streaming — full-panel click target */}
         {!isStreaming && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            <div className="w-20 h-20 rounded-full border-2 border-primary/30 flex items-center justify-center">
-              <Video className="w-10 h-10 text-primary/50" />
-            </div>
-            <p className="text-sm font-mono text-muted-foreground">
-              Camera Inactive
-            </p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <button
+              onClick={startCamera}
+              className="flex flex-col items-center gap-3 group focus:outline-none"
+              aria-label="Start camera"
+            >
+              <div className="w-16 h-16 rounded-full border-2 border-primary/40 group-hover:border-primary/80 group-hover:bg-primary/10 flex items-center justify-center transition-all duration-200 shadow-[0_0_16px_rgba(0,255,255,0.1)] group-hover:shadow-[0_0_24px_rgba(0,255,255,0.25)]">
+                <Video className="w-7 h-7 text-primary/60 group-hover:text-primary transition-colors" />
+              </div>
+              <span className="text-xs font-mono text-muted-foreground group-hover:text-primary transition-colors tracking-widest uppercase">
+                Enable Camera
+              </span>
+            </button>
           </div>
         )}
 
-        {/* Controls overlay */}
-        <div className="absolute top-2 right-2 flex items-center gap-2">
-          <button
-            onClick={isStreaming ? stopCamera : startCamera}
-            className={`p-2 rounded border transition-colors ${
-              isStreaming
-                ? "border-red-500/50 bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-            }`}
-            aria-label={isStreaming ? "Stop camera" : "Start camera"}
-          >
-            {isStreaming ? (
+        {/* Stop button — only shown while streaming */}
+        {isStreaming && (
+          <div className="absolute top-2 right-2">
+            <button
+              onClick={stopCamera}
+              className="p-2 rounded border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/25 transition-colors"
+              aria-label="Stop camera"
+            >
               <VideoOff className="w-4 h-4" />
-            ) : (
-              <Video className="w-4 h-4" />
-            )}
-          </button>
-        </div>
+            </button>
+          </div>
+        )}
 
         {/* Gesture detection label */}
         {isStreaming && (

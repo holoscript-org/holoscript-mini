@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { HoloPanel } from "./holo-panel"
-import { Send, Mic, MicOff, Terminal } from "lucide-react"
+import { Send, Mic, MicOff } from "lucide-react"
 
 interface CommandEntry {
   id: string
@@ -133,101 +133,84 @@ export function CommandPanel({
 
   return (
     <HoloPanel title="Command Interface" statusIndicator className="h-full">
-      <div className="flex flex-col h-full min-h-[200px]">
+      <div className="flex flex-col h-full min-h-0 gap-2">
         {/* Command history */}
         <div
           ref={historyRef}
-          className="flex-1 overflow-auto mb-3 p-2 rounded bg-background/50 border border-primary/10"
-          style={{ maxHeight: "150px" }}
+          className="flex-1 min-h-0 overflow-auto rounded bg-black/40 border border-primary/15 p-2"
         >
           {commandHistory.length === 0 ? (
-            <div className="text-center text-muted-foreground text-xs font-mono py-4">
-              No commands yet
+            <div className="text-center text-muted-foreground/50 text-xs font-mono py-3">
+              — no output yet —
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {commandHistory.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`flex items-start gap-2 text-xs font-mono ${
-                    entry.type === "user"
-                      ? "text-primary"
-                      : "text-muted-foreground"
-                  }`}
+                  className="flex items-start gap-1.5 text-xs font-mono leading-5"
                 >
-                  <span className="text-muted-foreground/50 shrink-0">
-                    [{mounted ? formatTime(entry.timestamp) : "--:--:--"}]
+                  <span className="text-primary/30 shrink-0 tabular-nums">
+                    {mounted ? formatTime(entry.timestamp) : "--:--:--"}
                   </span>
-                  <span
-                    className={`shrink-0 ${
-                      entry.type === "user" ? "text-primary" : "text-chart-2"
-                    }`}
-                  >
-                    {entry.type === "user" ? ">" : "$"}
+                  <span className={`shrink-0 font-bold ${entry.type === "user" ? "text-primary" : "text-emerald-400"}`}>
+                    {entry.type === "user" ? "›" : "»"}
                   </span>
-                  <span className="break-all">{entry.text}</span>
+                  <span className={`break-all ${entry.type === "user" ? "text-primary/90" : "text-slate-300"}`}>
+                    {entry.text}
+                  </span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Input area */}
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
-            <Terminal className="w-3 h-3" />
-            Describe simulation
-          </label>
+        {/* Input row */}
+        <div className="shrink-0 flex items-center gap-2">
+          {/* Prompt glyph */}
+          <span className="text-primary/50 font-mono text-sm select-none">›_</span>
 
-          <div className="flex items-center gap-2">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSendCommand()
-                  }
-                }}
-                placeholder="Enter command..."
-                className="w-full px-3 py-2 text-sm font-mono bg-input border border-primary/30 rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-colors"
-              />
-              {isListening && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <span className="flex items-center gap-1 text-xs text-primary animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    Listening...
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={toggleVoiceInput}
-              className={`p-2 rounded border transition-colors ${
-                isListening
-                  ? "border-primary bg-primary/20 text-primary animate-pulse"
-                  : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-              }`}
-              aria-label={isListening ? "Stop listening" : "Start voice input"}
-            >
-              {isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
-              )}
-            </button>
-
-            <button
-              onClick={handleSendCommand}
-              disabled={!inputValue.trim()}
-              className="p-2 rounded border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Send command"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSendCommand() }}
+              placeholder={isListening ? "" : "Enter command or describe a scene…"}
+              className="w-full px-3 py-1.5 text-xs font-mono bg-black/40 border border-primary/30 rounded text-primary placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
+            />
+            {isListening && (
+              <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
+                <span className="flex items-center gap-1.5 text-xs font-mono text-primary animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Listening…
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* Mic toggle */}
+          <button
+            onClick={toggleVoiceInput}
+            className={`p-1.5 rounded border transition-colors ${
+              isListening
+                ? "border-primary bg-primary/20 text-primary animate-pulse"
+                : "border-primary/30 bg-primary/5 text-primary/60 hover:text-primary hover:bg-primary/15"
+            }`}
+            aria-label={isListening ? "Stop listening" : "Voice input"}
+          >
+            {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+          </button>
+
+          {/* Send */}
+          <button
+            onClick={handleSendCommand}
+            disabled={!inputValue.trim()}
+            className="p-1.5 rounded border border-primary/30 bg-primary/10 text-primary hover:bg-primary/25 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Send"
+          >
+            <Send className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </HoloPanel>

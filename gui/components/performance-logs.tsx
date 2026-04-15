@@ -23,13 +23,28 @@ const initialLogs: LogEntry[] = [
   { timestamp: "11:00:03.106", message: "Voice → 'Reset and show a galaxy cluster'" },
 ]
 
-export function PerformanceLogs() {
+interface PerformanceLogsProps {
+  /** Live log strings from the backend. When provided, shown instead of demo data. */
+  liveLogs?: string[]
+}
+
+export function PerformanceLogs({ liveLogs }: PerformanceLogsProps) {
   const [guiFps, setGuiFps] = useState(27.0)
   const [simFps, setSimFps] = useState(14.6)
   const [fpsHistory, setFpsHistory] = useState<number[]>(Array(60).fill(27))
   const [simHistory, setSimHistory] = useState<number[]>(Array(60).fill(14.6))
-  const [logs] = useState<LogEntry[]>(initialLogs)
   const logsRef = useRef<HTMLDivElement>(null)
+
+  // Convert live log strings (e.g. "[10:00:01.123] msg") into LogEntry shape,
+  // falling back to static demo logs when backend is offline.
+  const logs: LogEntry[] = liveLogs && liveLogs.length > 0
+    ? liveLogs.map((raw) => {
+        const match = raw.match(/^\[(\d{2}:\d{2}:\d{2}\.\d+)\]\s(.*)$/)
+        return match
+          ? { timestamp: match[1], message: match[2] }
+          : { timestamp: "", message: raw }
+      })
+    : initialLogs
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -41,7 +56,7 @@ export function PerformanceLogs() {
 
       setFpsHistory((prev) => [...prev.slice(1), newGuiFps])
       setSimHistory((prev) => [...prev.slice(1), newSimFps])
-    }, 100)
+    }, 450)
 
     return () => clearInterval(interval)
   }, [])

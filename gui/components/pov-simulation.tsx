@@ -3,21 +3,30 @@
 import { useEffect, useRef, useState } from "react"
 import { HoloPanel } from "./holo-panel"
 import { Maximize2, ZoomIn, Plus, Minus } from "lucide-react"
+import type { Frame } from "@/lib/api"
 
 interface SimulationProps {
   zoom?: number
   rotation?: { x: number; y: number }
   onZoomChange?: (zoom: number) => void
+  compact?: boolean
+  /** Live cylindrical POV frame from the renderer. When provided, the real
+   *  frame is drawn as a polar overlay instead of the demo animation. */
+  frame?: Frame
 }
 
-export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationProps) {
+export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = false, frame }: SimulationProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentZoom, setCurrentZoom] = useState(zoom)
   const animationRef = useRef<number | null>(null)
+  const lastDrawTsRef = useRef(0)
   const timeRef = useRef(0)
   const rotationRef = useRef({ x: 0, y: 0 })
+  // Hold latest frame in a ref so the animation loop can read it without
+  // re-registering the effect every poll tick.
+  const frameRef = useRef<Frame>(null)
 
   // Update zoom when prop changes
   useEffect(() => {
@@ -30,6 +39,11 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
       rotationRef.current = rotation
     }
   }, [rotation])
+
+  // Keep live frame ref in sync without restarting the animation loop
+  useEffect(() => {
+    frameRef.current = frame ?? null
+  }, [frame])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -52,9 +66,65 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
     // ASCII characters for the hologram effect
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*"
 
-    const animate = () => {
+    const drawPOVFrame = (liveFrame: NonNullable<Frame>) => {
+      const w = canvas.width
+      const h = canvas.height
+      const cx = w / 2
+      const cy = h / 2
+      const maxRadius = Math.min(cx, cy) * 0.88 * currentZoom
+
+      ctx.fillStyle = "rgb(0, 10, 20)"
+      ctx.fillRect(0, 0, w, h)
+
+      const numAngles = liveFrame.length
+      const numLeds = liveFrame[0]?.length ?? 0
+
+      for (let a = 0; a < numAngles; a++) {
+        const theta = (a / numAngles) * 2 * Math.PI
+        for (let led = 0; led < numLeds; led++) {
+          const pixel = liveFrame[a][led]
+          if (!pixel) continue
+          const [r, g, b] = pixel
+          if (r + g + b < 12) continue
+          const radius = ((led + 1) / numLeds) * maxRadius
+          const x = cx + radius * Math.cos(theta)
+          const y = cy + radius * Math.sin(theta)
+          const dotSize = 1.5 + (led / numLeds) * 1.5
+          ctx.fillStyle = `rgb(${r},${g},${b})`
+          ctx.fillRect(x - dotSize / 2, y - dotSize / 2, dotSize, dotSize)
+        }
+      }
+
+      // Ring overlay
+      ctx.strokeStyle = "rgba(0,255,255,0.2)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.arc(cx, cy, maxRadius, 0, Math.PI * 2)
+      ctx.stroke()
+
+      // Live indicator
+      ctx.fillStyle = "rgba(0,255,255,0.6)"
+      ctx.font = "10px monospace"
+      ctx.textAlign = "left"
+      ctx.fillText("● LIVE", 8, 16)
+    }
+
+    const animate = (ts: number) => {
+      if (ts - lastDrawTsRef.current < 33) {
+        animationRef.current = requestAnimationFrame(animate)
+        return
+      }
+      lastDrawTsRef.current = ts
       timeRef.current += 0.02
 
+      const liveFrame = frameRef.current
+      if (liveFrame && liveFrame.length > 0) {
+        drawPOVFrame(liveFrame)
+        animationRef.current = requestAnimationFrame(animate)
+        return
+      }
+
+      // --- Demo animation (no live signal) ---
       ctx.fillStyle = "rgba(0, 20, 30, 0.1)"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -83,7 +153,6 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
       const baseRadius = Math.min(canvas.width, canvas.height) * 0.35
       const radius = baseRadius * currentZoom
 
-      // Draw wireframe sphere
       ctx.font = `${Math.max(8, 10 * currentZoom)}px monospace`
 
       for (let i = 0; i < 200; i++) {
@@ -94,15 +163,12 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
         const y3d = Math.cos(theta)
         const z3d = Math.sin(theta) * Math.sin(phi)
 
-        // Apply external rotation
         const rotY = timeRef.current + rotationRef.current.y * 0.01
         const rotX = rotationRef.current.x * 0.01
 
-        // Rotate around Y axis
         let rotatedX = x3d * Math.cos(rotY) - z3d * Math.sin(rotY)
         let rotatedZ = x3d * Math.sin(rotY) + z3d * Math.cos(rotY)
 
-        // Rotate around X axis
         const rotatedY = y3d * Math.cos(rotX) - rotatedZ * Math.sin(rotX)
         rotatedZ = y3d * Math.sin(rotX) + rotatedZ * Math.cos(rotX)
 
@@ -112,12 +178,10 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
 
         const alpha = 0.3 + depth * 0.7
         ctx.fillStyle = `rgba(0, 255, 255, ${alpha})`
-
         const char = chars[Math.floor(Math.random() * chars.length)]
         ctx.fillText(char, x, y)
       }
 
-      // Draw orbital rings
       for (let ring = 0; ring < 3; ring++) {
         const ringRadius = radius * (0.8 + ring * 0.15)
         const ringOffset = timeRef.current * (1 + ring * 0.3)
@@ -127,40 +191,29 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
           const angle = (i / 100) * Math.PI * 2 + ringOffset
           const x = centerX + Math.cos(angle) * ringRadius
           const y = centerY + Math.sin(angle) * ringRadius * 0.3
-
-          if (i === 0) {
-            ctx.moveTo(x, y)
-          } else {
-            ctx.lineTo(x, y)
-          }
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
         }
         ctx.strokeStyle = `rgba(0, 255, 255, ${0.3 - ring * 0.08})`
         ctx.lineWidth = 2 - ring * 0.5
         ctx.stroke()
       }
 
-      // Draw floating text
-      const texts = [
-        "SYSTEM.INIT",
-        "HOLOGRAM.ACTIVE",
-        "SCAN.COMPLETE",
-        "DATA.STREAM",
-      ]
-
+      const texts = ["SYSTEM.INIT", "HOLOGRAM.ACTIVE", "SCAN.COMPLETE", "DATA.STREAM"]
       texts.forEach((text, i) => {
         const offset = timeRef.current * 0.5 + (i * Math.PI) / 2
         const textX = 20 + Math.sin(offset) * 10
         const textY = 30 + i * 20
-
         ctx.fillStyle = `rgba(0, 255, 255, ${0.5 + Math.sin(offset) * 0.3})`
         ctx.font = "12px monospace"
+        ctx.textAlign = "left"
         ctx.fillText(text, textX, textY)
       })
 
       animationRef.current = requestAnimationFrame(animate)
     }
 
-    animate()
+    animate(0)
 
     return () => {
       window.removeEventListener("resize", resizeCanvas)
@@ -194,10 +247,14 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
   }
 
   return (
-    <HoloPanel title="360° Simulation" statusIndicator className="h-full">
+    <HoloPanel title="360 Projection Window" statusIndicator className="h-full">
       <div 
         ref={containerRef}
-        className="relative aspect-square md:aspect-auto md:h-[400px] lg:h-[500px] bg-background/50 rounded overflow-hidden"
+        className={`relative bg-background/50 rounded overflow-hidden ${
+          compact
+            ? "h-full min-h-0"
+            : "aspect-square md:aspect-auto md:h-[400px] lg:h-[500px]"
+        }`}
       >
         <canvas 
           ref={canvasRef} 
@@ -250,42 +307,23 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange }: SimulationPr
           </button>
         </div>
 
-        {/* Circular overlay */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div
-            className="rounded-full border border-primary/20 transition-all duration-300"
-            style={{
-              width: `${80 * currentZoom}%`,
-              height: `${80 * currentZoom}%`,
-              maxWidth: "100%",
-              maxHeight: "100%",
-            }}
-          />
-          <div
-            className="absolute rounded-full border border-primary/10 transition-all duration-300"
-            style={{
-              width: `${60 * currentZoom}%`,
-              height: `${60 * currentZoom}%`,
-              maxWidth: "90%",
-              maxHeight: "90%",
-            }}
-          />
-          <div
-            className="absolute rounded-full border border-primary/10 transition-all duration-300"
-            style={{
-              width: `${40 * currentZoom}%`,
-              height: `${40 * currentZoom}%`,
-              maxWidth: "80%",
-              maxHeight: "80%",
-            }}
-          />
-        </div>
-
-        {/* Corner markers */}
-        <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-primary/40 pointer-events-none" />
-        <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-primary/40 pointer-events-none" />
-        <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-primary/40 pointer-events-none" />
-        <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-primary/40 pointer-events-none" />
+        {/* Decorative overlays — only shown in full (non-compact) mode */}
+        {!compact && (
+          <>
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="rounded-full border border-primary/20 transition-all duration-300"
+                style={{ width: `${80 * currentZoom}%`, height: `${80 * currentZoom}%`, maxWidth: "100%", maxHeight: "100%" }} />
+              <div className="absolute rounded-full border border-primary/10 transition-all duration-300"
+                style={{ width: `${60 * currentZoom}%`, height: `${60 * currentZoom}%`, maxWidth: "90%", maxHeight: "90%" }} />
+              <div className="absolute rounded-full border border-primary/10 transition-all duration-300"
+                style={{ width: `${40 * currentZoom}%`, height: `${40 * currentZoom}%`, maxWidth: "80%", maxHeight: "80%" }} />
+            </div>
+            <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-primary/40 pointer-events-none" />
+            <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-primary/40 pointer-events-none" />
+            <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-primary/40 pointer-events-none" />
+            <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-primary/40 pointer-events-none" />
+          </>
+        )}
       </div>
     </HoloPanel>
   )

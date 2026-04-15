@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from OpenGL.GL import glReadPixels, GL_RGB, GL_UNSIGNED_BYTE
+from OpenGL.GL import glReadPixels, glReadBuffer, GL_BACK, GL_RGB, GL_UNSIGNED_BYTE
 from PIL import Image
 
 
@@ -32,6 +32,9 @@ class FrameExtractor:
         Returns a zero-filled array of the correct shape/dtype on any GL error.
         """
         try:
+            # In a double-buffered context, on_draw renders into the back buffer.
+            # Read explicitly from GL_BACK to avoid intermittent black captures.
+            glReadBuffer(GL_BACK)
             raw = glReadPixels(0, 0, self.width, self.height, GL_RGB, GL_UNSIGNED_BYTE)
             image = np.frombuffer(raw, dtype=np.uint8)
             image = image.reshape(self.height, self.width, 3)
