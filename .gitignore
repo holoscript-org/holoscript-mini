@@ -218,3 +218,4 @@ renderer/save_*.py
 renderer/cylindrical/validator.py
 
 /.claude/
+/.runtime/
