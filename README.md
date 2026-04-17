@@ -1,1 +1,0 @@
-# holoscript-mini

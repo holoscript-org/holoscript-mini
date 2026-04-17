@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load environment variables (e.g. OLLAMA_MODEL)
 load_dotenv()
 
-from voice.recorder import record_audio
+from voice.recorder import record_speech_with_retries
 from voice.transcriber import transcribe
 from voice.command_parser import classify_command
 from llm.ollama_client import warmup_ollama_model
@@ -33,14 +33,19 @@ def main():
     elif not enable_warmup:
         print("\n[0/4] Ollama warmup disabled via OLLAMA_ENABLE_WARMUP.")
     
-    # 1. Record audio
-    duration = 5
-    print(f"\n[1/4] Recording audio for {duration} seconds...")
-    print("*" * 40)
-    print("        >>> SPEAK NOW <<<")
-    print("*" * 40)
-    audio = record_audio(duration=duration)
-    print(">>> RECORDING FINISHED <<<")
+    # 1. Record speech with VAD
+    print(f"\n[1/4] Listening for speech (min. 0.5s, max. 800ms silence tolerance)...")
+    print("*" * 50)
+    print("          >>> SPEAK NOW <<<")
+    print("*" * 50)
+    audio = record_speech_with_retries(max_retries=3)
+    
+    if audio is None:
+        print("\n[!] Failed to capture valid speech after 3 attempts. Exiting.")
+        sys.exit(0)
+    
+    duration = len(audio) / 16000
+    print(f">>> SPEECH CAPTURED ({duration:.2f}s) <<<")
     
     # 2. Transcribe
     print("\n[2/4] Transcribing audio via Whisper...")
