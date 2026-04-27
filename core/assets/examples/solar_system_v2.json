@@ -1,0 +1,99 @@
+{
+  "name": "Solar System",
+  "camera": { "position": [0, 18, 55], "target": [0, 0, 0], "fov": 60 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.15, "color": "#ffffff" },
+    { "type": "point",       "intensity": 4.0,  "color": "#ffcc66", "position": [0, 0, 0] },
+    { "type": "directional", "intensity": 0.6,  "color": "#ffffff", "position": [50, 30, 20], "castShadow": true }
+  ],
+  "objects": [
+    {
+      "id": "sun", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 2.5 },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffdd33", "roughness": 0.4, "metalness": 0.0, "emissive": "#ff8800", "emissiveIntensity": 0.9 },
+      "label": "Sun",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "mercury", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.25 },
+      "position": [4, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#aaa098", "roughness": 0.9, "metalness": 0.0 },
+      "label": "Mercury",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 1.607 }
+    },
+    {
+      "id": "venus", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.45 },
+      "position": [6.5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#e6c87a", "roughness": 0.7, "metalness": 0.0 },
+      "label": "Venus",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 1.174 }
+    },
+    {
+      "id": "earth", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.5 },
+      "position": [9, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#1a5acc", "roughness": 0.7, "metalness": 0.05 },
+      "label": "Earth",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 1.0 }
+    },
+    {
+      "id": "moon", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.14 },
+      "position": [0.65, 0, 0], "scale": [1, 1, 1],
+      "parent": "earth",
+      "material": { "type": "standard", "color": "#cccccc", "roughness": 0.95, "metalness": 0.0 },
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 13.0 }
+    },
+    {
+      "id": "mars", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.3 },
+      "position": [11.5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#bf5530", "roughness": 0.9, "metalness": 0.0 },
+      "label": "Mars",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.802 }
+    },
+    {
+      "id": "jupiter", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.2 },
+      "position": [16, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#c8975e", "roughness": 0.6, "metalness": 0.0 },
+      "label": "Jupiter",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.434 }
+    },
+    {
+      "id": "saturn", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.0 },
+      "position": [21, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ddcc88", "roughness": 0.5, "metalness": 0.05 },
+      "label": "Saturn",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.323 }
+    },
+    {
+      "id": "saturn_ring", "type": "primitive",
+      "geometry": { "type": "ring", "innerRadius": 1.35, "outerRadius": 2.35, "thetaSegments": 128 },
+      "position": [0, 0, 0], "rotation": [16, 0, 8], "scale": [1, 1, 1],
+      "parent": "saturn",
+      "material": { "type": "standard", "color": "#ccbb77", "roughness": 0.8, "metalness": 0.0, "opacity": 0.6, "transparent": true },
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "uranus", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.7 },
+      "position": [25, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#88d4e0", "roughness": 0.4, "metalness": 0.0 },
+      "label": "Uranus",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.228 }
+    },
+    {
+      "id": "neptune", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.65 },
+      "position": [28.5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#2244e8", "roughness": 0.4, "metalness": 0.0 },
+      "label": "Neptune",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.182 }
+    }
+  ]
+}

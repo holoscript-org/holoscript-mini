@@ -142,18 +142,21 @@ from OpenGL.GL import (
 from OpenGL.GLU import gluPerspective, gluLookAt
 
 # Allow `python renderer/render_window.py` to resolve top-level package imports.
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_RENDERER_ASSETS = os.path.join(_PROJECT_ROOT, "renderer", "assets")
+_SOLAR_SYSTEM_PATH = os.path.join(_RENDERER_ASSETS, "solar_system.json")
+_HUMAN_HEART_PATH  = os.path.join(_RENDERER_ASSETS, "human_heart.json")
 if __package__ in (None, ""):
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
 
-import renderer.primitives as primitives
+import renderer.engine.primitives as primitives
 from renderer.scene_parser import SceneObject, parse_scene
-from renderer.scene_loader import load_scene_from_file
-from renderer.animation import Animator
-from renderer.transform_applier import TransformApplier
+from renderer.loader.scene_loader import load_scene_from_file
+from renderer.engine.animation import Animator
+from renderer.engine.transforms import TransformApplier
 from renderer.frame_extractor import FrameExtractor
-from renderer.cylindrical.frame_builder import build_frame_from_scene
+from renderer.engine.cylindrical.frame_builder import build_frame_from_scene
 from renderer.scene_state_ref import scene_state
 from core.state.ipc_store import publish_renderer_snapshot, read_scene_command, read_control_command
 
@@ -205,7 +208,7 @@ _DEFAULT_CAMERA = {
 # ---------------------------------------------------------------------------
 
 class Renderer:
-    def __init__(self) -> None:
+    def __init__(self, scene_path: str = _SOLAR_SYSTEM_PATH) -> None:
         # Request a legacy (compatibility) context so fixed-function GL works
         config = _pgl.Config(
             double_buffer=True,
@@ -215,15 +218,13 @@ class Renderer:
         )
         self.window = pyglet.window.Window(
             width=800, height=800,
-            caption="HoloScript Phase 10 - Full Integration",
+            caption=f"HoloScript — {os.path.basename(scene_path)}",
             config=config,
         )
 
         self._setup_gl()
 
-        self.scene_objects: list[SceneObject] = load_scene_from_file(
-            "renderer/assets/solar_system.json"
-        )
+        self.scene_objects: list[SceneObject] = load_scene_from_file(scene_path)
         if not self.scene_objects:
             print("[Renderer] WARNING: scene loaded empty — falling back to gold sphere at origin.")
             self.scene_objects = [
@@ -397,7 +398,7 @@ class Renderer:
             scene_state.scene_json = test_scene
             print("[J key] Injected 3-object test scene into SceneState")
         elif symbol == key.K:
-            with open("renderer/assets/solar_system.json", "r") as _f:
+            with open(_SOLAR_SYSTEM_PATH, "r", encoding="utf-8") as _f:
                 data = json.load(_f)
             scene_state.scene_json = data
             scene_state.rotation_y = 0.0
@@ -405,7 +406,7 @@ class Renderer:
             scene_state.explode = 0.0
             print("[K key] Reloaded solar system from JSON file")
         elif symbol == key.H:
-            with open("renderer/assets/human_heart.json", "r") as _f:
+            with open(_HUMAN_HEART_PATH, "r", encoding="utf-8") as _f:
                 data = json.load(_f)
             scene_state.scene_json = data
             scene_state.rotation_y = 0.0
@@ -431,7 +432,7 @@ class Renderer:
                                aspect="auto", vmin=0, vmax=255)
                 axes[2].set_title("Blue channel")
                 plt.tight_layout()
-                path = "renderer/assets/pov_frame.png"
+                path = os.path.join(_RENDERER_ASSETS, "pov_frame.png")
                 plt.savefig(path, dpi=150)
                 plt.close()
                 print(f"[POV] Frame visualization saved to {path}")
@@ -470,14 +471,14 @@ class Renderer:
             }
             scene_state.scene_json = test_scene
         elif action == "k":
-            with open("renderer/assets/solar_system.json", "r", encoding="utf-8") as f:
+            with open(_SOLAR_SYSTEM_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             scene_state.scene_json  = data
             scene_state.rotation_y  = 0.0
             scene_state.scale       = 1.0
             scene_state.explode     = 0.0
         elif action == "h":
-            with open("renderer/assets/human_heart.json", "r", encoding="utf-8") as f:
+            with open(_HUMAN_HEART_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             scene_state.scene_json  = data
             scene_state.rotation_y  = 0.0
@@ -622,5 +623,13 @@ class Renderer:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    renderer = Renderer()
+    import argparse
+    parser = argparse.ArgumentParser(description="HoloScript renderer")
+    parser.add_argument(
+        "--scene", "-s",
+        default=_SOLAR_SYSTEM_PATH,
+        help="Path to scene JSON file (default: solar_system.json)"
+    )
+    args = parser.parse_args()
+    renderer = Renderer(scene_path=args.scene)
     renderer.run()

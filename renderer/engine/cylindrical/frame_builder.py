@@ -1,6 +1,6 @@
-"""renderer/cylindrical/frame_builder.py
+"""renderer/engine/cylindrical/frame_builder.py
 Assembles the (360, 18, 3) POV frame from a list of SceneObjects.
-Imports: numpy, math, renderer.cylindrical.projector.
+Imports: numpy, math, renderer.engine.cylindrical.projector.
 No OpenGL, no pyglet, no SceneState.
 """
 
@@ -10,7 +10,7 @@ import math
 
 import numpy as np
 
-from renderer.cylindrical.projector import (
+from renderer.engine.cylindrical.projector import (
     cartesian_to_angle_idx,
     y_to_led_idx,
     compute_scene_bounds,

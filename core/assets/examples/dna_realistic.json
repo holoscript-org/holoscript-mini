@@ -1,0 +1,80 @@
+{
+  "name": "DNA Helix Realistic",
+  "camera": { "position": [11.5, 0.8, 21.5], "target": [0, 0, 0], "fov": 52 },
+  "lights": [
+    { "type": "ambient", "intensity": 0.32, "color": "#ffffff" },
+    { "type": "directional", "intensity": 1.0, "color": "#d6e6ff", "position": [8, 10, 12], "castShadow": true },
+    { "type": "point", "intensity": 0.85, "color": "#88b8ff", "position": [-6, 2, -8] },
+    { "type": "point", "intensity": 0.6, "color": "#ff8fb0", "position": [6, -3, 9] }
+  ],
+  "objects": [
+    { "id": "dna_l00", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [2.35, -7.8, 0.0], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r00", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-2.35, -7.8, 0.0], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair00", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [2.35, -7.8, 0.0], "to": [-2.35, -7.8, 0.0] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#a4e4ff", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l01", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [1.993, -6.6, 1.245], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r01", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-1.993, -6.6, -1.245], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair01", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [1.993, -6.6, 1.245], "to": [-1.993, -6.6, -1.245] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ffd68a", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l02", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [1.03, -5.4, 2.112], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r02", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-1.03, -5.4, -2.112], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair02", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [1.03, -5.4, 2.112], "to": [-1.03, -5.4, -2.112] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#b8ff9b", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l03", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-0.246, -4.2, 2.337], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r03", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [0.246, -4.2, -2.337], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair03", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-0.246, -4.2, 2.337], "to": [0.246, -4.2, -2.337] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff9ac1", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l04", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-1.447, -3.0, 1.852], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r04", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [1.447, -3.0, -1.852], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair04", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-1.447, -3.0, 1.852], "to": [1.447, -3.0, -1.852] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#a4e4ff", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l05", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-2.208, -1.8, 0.804], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r05", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [2.208, -1.8, -0.804], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair05", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-2.208, -1.8, 0.804], "to": [2.208, -1.8, -0.804] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ffd68a", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l06", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-2.299, -0.6, -0.489], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r06", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [2.299, -0.6, 0.489], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair06", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-2.299, -0.6, -0.489], "to": [2.299, -0.6, 0.489] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#b8ff9b", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l07", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-1.69, 0.6, -1.632], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r07", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [1.69, 0.6, 1.632], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair07", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-1.69, 0.6, -1.632], "to": [1.69, 0.6, 1.632] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff9ac1", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l08", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-0.569, 1.8, -2.28], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r08", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [0.569, 1.8, 2.28], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair08", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [-0.569, 1.8, -2.28], "to": [0.569, 1.8, 2.28] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#a4e4ff", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "dna_l09", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [0.726, 3.0, -2.235], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#3f7cff", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "dna_r09", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.34 }, "position": [-0.726, 3.0, 2.235], "scale": [1.0, 1.06, 1.0], "material": { "type": "standard", "color": "#ff5f86", "roughness": 0.35, "metalness": 0.08 }, "animation": { "type": "none" } },
+    { "id": "pair09", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.07, "from": [0.726, 3.0, -2.235], "to": [-0.726, 3.0, 2.235] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ffd68a", "roughness": 0.45, "metalness": 0.0, "opacity": 0.9 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l00", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [2.35, -7.8, 0.0], "to": [1.993, -6.6, 1.245] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r00", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-2.35, -7.8, 0.0], "to": [-1.993, -6.6, -1.245] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l01", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [1.993, -6.6, 1.245], "to": [1.03, -5.4, 2.112] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r01", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-1.993, -6.6, -1.245], "to": [-1.03, -5.4, -2.112] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l02", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [1.03, -5.4, 2.112], "to": [-0.246, -4.2, 2.337] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r02", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-1.03, -5.4, -2.112], "to": [0.246, -4.2, -2.337] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l03", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-0.246, -4.2, 2.337], "to": [-1.447, -3.0, 1.852] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r03", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [0.246, -4.2, -2.337], "to": [1.447, -3.0, -1.852] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l04", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-1.447, -3.0, 1.852], "to": [-2.208, -1.8, 0.804] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r04", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [1.447, -3.0, -1.852], "to": [2.208, -1.8, -0.804] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l05", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-2.208, -1.8, 0.804], "to": [-2.299, -0.6, -0.489] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r05", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [2.208, -1.8, -0.804], "to": [2.299, -0.6, 0.489] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l06", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-2.299, -0.6, -0.489], "to": [-1.69, 0.6, -1.632] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r06", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [2.299, -0.6, 0.489], "to": [1.69, 0.6, 1.632] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l07", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-1.69, 0.6, -1.632], "to": [-0.569, 1.8, -2.28] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r07", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [1.69, 0.6, 1.632], "to": [0.569, 1.8, 2.28] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "rail_l08", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [-0.569, 1.8, -2.28], "to": [0.726, 3.0, -2.235] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#5aa3ff", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+    { "id": "rail_r08", "type": "primitive", "geometry": { "type": "cylinder", "radius": 0.11, "from": [0.569, 1.8, 2.28], "to": [-0.726, 3.0, 2.235] }, "position": [0, 0, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#ff7a97", "roughness": 0.5, "metalness": 0.05 }, "animation": { "type": "none" } },
+
+    { "id": "dna_label", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.01 }, "position": [0, 8.9, 0], "scale": [1, 1, 1], "material": { "type": "standard", "color": "#00ffff", "roughness": 0.5, "metalness": 0.0 }, "label": "DNA Double Helix", "animation": { "type": "none" } }
+  ]
+}

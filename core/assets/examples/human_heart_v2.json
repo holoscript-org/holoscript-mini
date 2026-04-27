@@ -1,0 +1,59 @@
+{
+  "name": "Human Heart",
+  "camera": { "position": [0, 2, 12], "target": [0, 0, 0], "fov": 45 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.5,  "color": "#ffffff" },
+    { "type": "directional", "intensity": 1.2,  "color": "#ffffff", "position": [5, 8, 5],   "castShadow": true },
+    { "type": "directional", "intensity": 0.4,  "color": "#ffcccc", "position": [-5, 3, -5] }
+  ],
+  "objects": [
+    {
+      "id": "left_ventricle", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.4 },
+      "position": [-0.8, -1.2, 0.2], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#b81414", "roughness": 0.6, "metalness": 0.1 },
+      "label": "Left Ventricle",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "right_ventricle", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.1 },
+      "position": [0.9, -0.9, 0.4], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#7219a0", "roughness": 0.6, "metalness": 0.1 },
+      "label": "Right Ventricle",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "left_atrium", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.9 },
+      "position": [-0.6, 1.0, -0.3], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#cc3333", "roughness": 0.5, "metalness": 0.1 },
+      "label": "Left Atrium",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "right_atrium", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.85 },
+      "position": [0.7, 0.9, -0.1], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#8833bb", "roughness": 0.5, "metalness": 0.1 },
+      "label": "Right Atrium",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "aorta", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.35, "from": [-0.3, 1.0, 0.0], "to": [-0.3, 3.4, 0.0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#cc2222", "roughness": 0.4, "metalness": 0.15 },
+      "label": "Aorta",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "pulmonary_artery", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.28, "from": [0.5, 0.8, 0.3], "to": [0.5, 3.0, 0.5] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#5522aa", "roughness": 0.4, "metalness": 0.15 },
+      "label": "Pulmonary Artery",
+      "animation": { "type": "none" }
+    }
+  ]
+}

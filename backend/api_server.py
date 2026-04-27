@@ -27,6 +27,7 @@ from core.state.ipc_store import (
 app = FastAPI(title="HoloScript API", version="1.0.0")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CORE_DIR = _PROJECT_ROOT / "core"
 _RENDER_PREVIEW_PATH = _PROJECT_ROOT / ".runtime" / "render_preview.jpg"
 _RENDER_PREVIEW_FALLBACK = _PROJECT_ROOT / "renderer" / "assets" / "test_frame.png"
 
@@ -57,11 +58,26 @@ def get_frame() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# GET /scene  — current scene JSON as set by the LLM / key press
+# GET /scene  — current scene JSON or load by name from core/assets/
 # ---------------------------------------------------------------------------
 
 @app.get("/scene")
-def get_scene() -> dict[str, Any]:
+def get_scene(name: str | None = None) -> dict[str, Any]:
+    if name is not None:
+        grammar_path = _CORE_DIR / "outputs" / "scene_grammar.json"
+        if grammar_path.exists():
+            try:
+                return json.loads(grammar_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        example_path = _CORE_DIR / "assets" / "examples" / f"{name}.json"
+        if example_path.exists():
+            try:
+                return json.loads(example_path.read_text(encoding="utf-8"))
+            except Exception:
+                raise HTTPException(status_code=500, detail=f"Failed to read scene: {name}")
+        raise HTTPException(status_code=404, detail=f"Scene not found: {name}")
+
     snap = read_renderer_snapshot()
     scene = snap.get("scene")
     if isinstance(scene, dict):

@@ -1,0 +1,48 @@
+{
+  "name": "Water Molecule (H2O)",
+  "camera": { "position": [0, 3, 8], "target": [0, 0, 0], "fov": 50 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.5, "color": "#ffffff" },
+    { "type": "directional", "intensity": 1.2, "color": "#ffffff", "position": [5, 8, 5], "castShadow": true }
+  ],
+  "objects": [
+    {
+      "id": "oxygen", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.6 },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ff2222", "roughness": 0.4, "metalness": 0.05 },
+      "label": "O",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "hydrogen_left", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.35 },
+      "position": [-1.1, 0.85, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#eeeeee", "roughness": 0.5, "metalness": 0.0 },
+      "label": "H",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "hydrogen_right", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.35 },
+      "position": [1.1, 0.85, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#eeeeee", "roughness": 0.5, "metalness": 0.0 },
+      "label": "H",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "bond_left", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.08, "from": [0, 0, 0], "to": [-1.1, 0.85, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#aaaaaa", "roughness": 0.6, "metalness": 0.0 },
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "bond_right", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.08, "from": [0, 0, 0], "to": [1.1, 0.85, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#aaaaaa", "roughness": 0.6, "metalness": 0.0 },
+      "animation": { "type": "none" }
+    }
+  ]
+}

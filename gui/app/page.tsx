@@ -6,8 +6,8 @@ import { CameraPanel } from "@/components/camera-panel"
 import { CommandPanel } from "@/components/command-panel"
 import { PerformanceLogs } from "@/components/performance-logs"
 import { SceneConfiguration } from "@/components/scene-configuration"
-import { RenderWindowPanel } from "@/components/render-window-panel"
-import { useSceneData } from "@/hooks/useSceneData"
+import { ThreeScene } from "@/components/ThreeScene"
+import { useWebGLSceneData } from "@/hooks/useWebGLSceneData"
 
 type GestureType = "PINCH" | "OPEN_PALM" | "FIST" | "POINTING" | "NONE"
 
@@ -20,8 +20,17 @@ export default function HologramDashboard() {
   const [simulationZoom, setSimulationZoom] = useState(1)
   const [simulationRotation, setSimulationRotation] = useState({ x: 0, y: 0 })
 
-  // Live data from the Python renderer via FastAPI
-  const { frame, scene, logs, status, connected } = useSceneData(200)
+  // WebGL-only runtime: both scene and cylindrical frame are client-side.
+  const {
+    frame,
+    scene,
+    logs,
+    status,
+    connected,
+    selectedScene,
+    sceneOptions,
+    setSelectedScene,
+  } = useWebGLSceneData()
 
   const handleGestureDetected = useCallback(
     (gesture: GestureType, hands: DetectedHand[]) => {
@@ -95,7 +104,21 @@ export default function HologramDashboard() {
                   : "bg-yellow-500 shadow-[0_0_6px_rgba(255,200,0,0.4)]"
               }`}
             />
-            {connected ? "Renderer Online" : "Demo Mode"}
+            {connected ? "WebGL Scene Loaded" : "Loading Scene"}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-primary/60">Scene JSON</span>
+            <select
+              value={selectedScene}
+              onChange={(e) => setSelectedScene(e.target.value)}
+              className="min-w-[220px] rounded border border-primary/30 bg-background/80 px-2 py-1 text-xs font-mono text-primary focus:outline-none focus:border-primary"
+            >
+              {sceneOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           {/* Active gesture badge */}
           {status.gesture !== "NONE" && (
@@ -110,9 +133,9 @@ export default function HologramDashboard() {
       </header>
 
       <div className="grid h-[calc(100vh-86px)] min-h-0 grid-cols-1 xl:grid-cols-[1fr_1.08fr] gap-3 md:gap-4">
-        {/* Left: Main renderer window (largest) */}
+        {/* Left: WebGL renderer driven by selected JSON scene */}
         <div className="min-h-0">
-          <RenderWindowPanel />
+          <ThreeScene scene={scene} />
         </div>
 
         {/* Right: Figma-style stacked layout */}

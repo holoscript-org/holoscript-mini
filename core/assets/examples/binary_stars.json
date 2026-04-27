@@ -1,0 +1,43 @@
+{
+  "name": "Binary Star System",
+  "camera": { "position": [0, 30, 60], "target": [0, 0, 0], "fov": 65 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.2, "color": "#ffffff" },
+    { "type": "point",       "intensity": 3.0, "color": "#ffcc44", "position": [5, 0, 0] },
+    { "type": "point",       "intensity": 2.5, "color": "#aaccff", "position": [-5, 0, 0] }
+  ],
+  "objects": [
+    {
+      "id": "star_alpha", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 2.0 },
+      "position": [5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffdd55", "roughness": 0.3, "metalness": 0.0, "emissive": "#ff8800", "emissiveIntensity": 0.8 },
+      "label": "Alpha",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.8 }
+    },
+    {
+      "id": "star_beta", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.4 },
+      "position": [-5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#aaccff", "roughness": 0.3, "metalness": 0.0, "emissive": "#6699ff", "emissiveIntensity": 0.7 },
+      "label": "Beta",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": -0.8 }
+    },
+    {
+      "id": "planet_x", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.4 },
+      "position": [18, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#33aa55", "roughness": 0.7, "metalness": 0.0 },
+      "label": "Planet X",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.2 }
+    },
+    {
+      "id": "moon_x", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.1 },
+      "position": [1.5, 0, 0], "scale": [1, 1, 1],
+      "parent": "planet_x",
+      "material": { "type": "standard", "color": "#888888", "roughness": 0.9, "metalness": 0.0 },
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 6.0 }
+    }
+  ]
+}

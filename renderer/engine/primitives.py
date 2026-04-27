@@ -43,7 +43,7 @@ from OpenGL.GL import (
 from OpenGL.GLU import gluNewQuadric, gluDeleteQuadric, gluSphere, gluCylinder, gluDisk, gluProject
 
 from renderer.scene_parser import SceneObject
-from renderer.mesh_loader import get_mesh
+from renderer.engine.mesh_loader import get_mesh
 
 # ---------------------------------------------------------------------------
 # Label cache — pyglet Label objects keyed by display text.
