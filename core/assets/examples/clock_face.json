@@ -1,0 +1,70 @@
+{
+  "name": "Analog Clock",
+  "camera": { "position": [0, 0, 18], "target": [0, 0, 0], "fov": 50 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.6, "color": "#ffffff" },
+    { "type": "directional", "intensity": 0.8, "color": "#ffffff", "position": [0, 5, 10] }
+  ],
+  "objects": [
+    {
+      "id": "face_rim", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 5.0, "height": 0.2 },
+      "position": [0, 0, -0.2], "rotation": [90, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#888877", "roughness": 0.3, "metalness": 0.6, "opacity": 0.5 },
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "label_12", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.15 },
+      "position": [0, 4.5, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffffff", "roughness": 0.5, "metalness": 0.0 },
+      "label": "12",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "label_3", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.15 },
+      "position": [4.5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffffff", "roughness": 0.5, "metalness": 0.0 },
+      "label": "3",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "label_6", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.15 },
+      "position": [0, -4.5, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffffff", "roughness": 0.5, "metalness": 0.0 },
+      "label": "6",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "label_9", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.15 },
+      "position": [-4.5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffffff", "roughness": 0.5, "metalness": 0.0 },
+      "label": "9",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "hour_hand", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.12, "from": [0, 0, 0], "to": [0, 2.5, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#222222", "roughness": 0.4, "metalness": 0.4 },
+      "animation": { "type": "spin", "axis": [0, 0, 1], "speed": -0.1454 }
+    },
+    {
+      "id": "minute_hand", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.07, "from": [0, 0, 0], "to": [0, 3.8, 0] },
+      "position": [0, 0, 0.1], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#111111", "roughness": 0.3, "metalness": 0.5 },
+      "animation": { "type": "spin", "axis": [0, 0, 1], "speed": -1.745 }
+    },
+    {
+      "id": "center_pin", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.18 },
+      "position": [0, 0, 0.2], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#dd2222", "roughness": 0.3, "metalness": 0.5 },
+      "animation": { "type": "none" }
+    }
+  ]
+}

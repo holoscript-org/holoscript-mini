@@ -72,6 +72,9 @@ class SceneState:
         self._frozen: bool = False
         self._current_gesture: str = "NONE"
 
+        # Scene version counter (incremented on every scene_json write)
+        self._scene_version: int = 0
+
         # Renderer output
         self._current_frame: np.ndarray | None = None
 
@@ -109,6 +112,21 @@ class SceneState:
             if self._scene_json is not None:
                 self._scene_history.append(self._scene_json)
             self._scene_json = value
+            self._scene_version += 1
+
+    # ------------------------------------------------------------------
+    # scene_version
+    # ------------------------------------------------------------------
+
+    @property
+    def scene_version(self) -> int:
+        """Monotonically increasing counter; incremented on every scene_json write.
+
+        The Renderer thread can detect scene changes by comparing a cached
+        integer against this value instead of diffing full dicts.
+        """
+        with self._lock:
+            return self._scene_version
 
     # ------------------------------------------------------------------
     # transcript

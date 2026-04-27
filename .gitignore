@@ -205,3 +205,35 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Renderer test and validation outputs/scripts
+renderer/assets/validation/
+renderer/assets/test*.png
+renderer/assets/pov_frame.png
+renderer/assets/test_frame.png
+renderer/assets/test_*.json
+renderer/assets/meshes/test*.obj
+renderer/verify_*.py
+renderer/save_*.py
+renderer/cylindrical/validator.py
+renderer/engine/cylindrical/validator.py
+
+# Dev / exploration scripts
+renderer/dev/
+
+# Core generated outputs (written at runtime by Member 1)
+core/outputs/scene_grammar.json
+
+# Root-level grammar artifact (superseded by core/outputs/)
+/scene_grammar.json
+
+# Dev/planning documents
+PROJECT_CONTEXT_FOR_GPT.md
+
+/.claude/
+/.runtime/
+
+# Node / Next.js
+gui/node_modules/
+gui/.next/
+gui/tsconfig.tsbuildinfo

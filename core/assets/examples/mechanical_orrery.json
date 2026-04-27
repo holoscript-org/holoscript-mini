@@ -1,0 +1,72 @@
+{
+  "name": "Mechanical Orrery",
+  "camera": { "position": [0, 35, 50], "target": [0, 0, 0], "fov": 60 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.3, "color": "#ffffff" },
+    { "type": "point",       "intensity": 4.0, "color": "#ffcc44", "position": [0, 0, 0] },
+    { "type": "directional", "intensity": 0.5, "color": "#ffffff", "position": [30, 20, 10], "castShadow": true }
+  ],
+  "objects": [
+    {
+      "id": "sun", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 1.2 },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffdd33", "roughness": 0.3, "metalness": 0.0, "emissive": "#ff8800", "emissiveIntensity": 0.9 },
+      "label": "Sun",
+      "animation": { "type": "none" }
+    },
+    {
+      "id": "track_arm_1", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.06, "from": [0, 0, 0], "to": [5, 0, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#887755", "roughness": 0.4, "metalness": 0.5 },
+      "animation": { "type": "spin", "axis": [0, 1, 0], "speed": 1.0 }
+    },
+    {
+      "id": "planet_1", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.4 },
+      "position": [5, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#5577ff", "roughness": 0.6, "metalness": 0.0 },
+      "label": "P1",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 1.0 }
+    },
+    {
+      "id": "track_arm_2", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.05, "from": [0, 0, 0], "to": [9, 0, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#887755", "roughness": 0.4, "metalness": 0.5 },
+      "animation": { "type": "spin", "axis": [0, 1, 0], "speed": 0.6 }
+    },
+    {
+      "id": "planet_2", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.55 },
+      "position": [9, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#cc7733", "roughness": 0.5, "metalness": 0.0 },
+      "label": "P2",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.6 }
+    },
+    {
+      "id": "moon_2", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.15 },
+      "position": [1.5, 0, 0], "scale": [1, 1, 1],
+      "parent": "planet_2",
+      "material": { "type": "standard", "color": "#aaaaaa", "roughness": 0.8, "metalness": 0.0 },
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 4.0 }
+    },
+    {
+      "id": "track_arm_3", "type": "primitive",
+      "geometry": { "type": "cylinder", "radius": 0.04, "from": [0, 0, 0], "to": [14, 0, 0] },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#887755", "roughness": 0.4, "metalness": 0.5 },
+      "animation": { "type": "spin", "axis": [0, 1, 0], "speed": 0.35 }
+    },
+    {
+      "id": "planet_3", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 0.7 },
+      "position": [14, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#44bb55", "roughness": 0.4, "metalness": 0.0 },
+      "label": "P3",
+      "animation": { "type": "orbit", "center": [0, 0, 0], "speed": 0.35 }
+    }
+  ]
+}

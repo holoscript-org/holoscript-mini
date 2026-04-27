@@ -1,0 +1,29 @@
+{
+  "name": "Galaxy Cluster",
+  "camera": { "position": [0, 40, 80], "target": [0, 0, 0], "fov": 70 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.15, "color": "#aabbff" },
+    { "type": "point",       "intensity": 5.0,  "color": "#ffeeaa", "position": [0, 0, 0] }
+  ],
+  "objects": [
+    {
+      "id": "core", "type": "primitive",
+      "geometry": { "type": "sphere", "radius": 3.5 },
+      "position": [0, 0, 0], "scale": [1, 1, 1],
+      "material": { "type": "standard", "color": "#ffeecc", "roughness": 0.2, "metalness": 0.0, "emissive": "#ffcc66", "emissiveIntensity": 0.7 },
+      "label": "Galactic Core",
+      "animation": { "type": "spin", "axis": [0, 1, 0], "speed": 0.1 }
+    },
+    { "id": "s01", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.2  }, "position": [ 8,  1,  3], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffe8cc", "roughness": 0.3, "metalness": 0.0, "emissive": "#ffcc88", "emissiveIntensity": 0.3 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.60 } },
+    { "id": "s02", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.18 }, "position": [-6,  2, -5], "scale": [1,1,1], "material": { "type": "standard", "color": "#cce0ff", "roughness": 0.3, "metalness": 0.0, "emissive": "#aaccff", "emissiveIntensity": 0.25 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.72 } },
+    { "id": "s03", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.25 }, "position": [12, -1,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffddbb", "roughness": 0.3, "metalness": 0.0, "emissive": "#ffaa66", "emissiveIntensity": 0.3 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.44 } },
+    { "id": "s04", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.15 }, "position": [-9,  0,  7], "scale": [1,1,1], "material": { "type": "standard", "color": "#ddeeff", "roughness": 0.3, "metalness": 0.0, "emissive": "#99bbff", "emissiveIntensity": 0.2 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.55 } },
+    { "id": "s05", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.22 }, "position": [ 4,  3,-10], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffeedd", "roughness": 0.3, "metalness": 0.0, "emissive": "#ffddaa", "emissiveIntensity": 0.28 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.38 } },
+    { "id": "s06", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.3  }, "position": [-14, -2,  1], "scale": [1,1,1], "material": { "type": "standard", "color": "#bbddff", "roughness": 0.3, "metalness": 0.0, "emissive": "#7799ff", "emissiveIntensity": 0.35 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.31 } },
+    { "id": "s07", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.14 }, "position": [ 3,  0,  6], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffccaa", "roughness": 0.3, "metalness": 0.0, "emissive": "#ff9955", "emissiveIntensity": 0.25 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.85 } },
+    { "id": "s08", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.19 }, "position": [-5, -3, -8], "scale": [1,1,1], "material": { "type": "standard", "color": "#eeeeff", "roughness": 0.3, "metalness": 0.0, "emissive": "#ccccff", "emissiveIntensity": 0.2 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.66 } },
+    { "id": "s09", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.28 }, "position": [16,  1, -4], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffd8bb", "roughness": 0.3, "metalness": 0.0, "emissive": "#ffaa66", "emissiveIntensity": 0.28 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.26 } },
+    { "id": "s10", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.16 }, "position": [-11,  2,  5], "scale": [1,1,1], "material": { "type": "standard", "color": "#aaccff", "roughness": 0.3, "metalness": 0.0, "emissive": "#7799dd", "emissiveIntensity": 0.22 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.42 } },
+    { "id": "s11", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.21 }, "position": [ 7, -2,  9], "scale": [1,1,1], "material": { "type": "standard", "color": "#ffeebb", "roughness": 0.3, "metalness": 0.0, "emissive": "#ffcc77", "emissiveIntensity": 0.26 }, "animation": { "type": "orbit", "center": [0,0,0], "speed": 0.53 } }
+  ]
+}

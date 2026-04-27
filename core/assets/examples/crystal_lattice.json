@@ -1,0 +1,37 @@
+{
+  "name": "Crystal Lattice (3x3x3)",
+  "camera": { "position": [8, 10, 14], "target": [0, 0, 0], "fov": 60 },
+  "lights": [
+    { "type": "ambient",     "intensity": 0.4, "color": "#aaccff" },
+    { "type": "directional", "intensity": 1.2, "color": "#ffffff", "position": [10, 15, 8], "castShadow": true }
+  ],
+  "objects": [
+    { "id": "a000", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2, -2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a001", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2, -2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a002", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2, -2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a010", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  0, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a011", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  0,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a012", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  0,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a020", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a021", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "a022", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [-2,  2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b000", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0, -2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b001", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0, -2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b002", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0, -2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b010", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0,  0, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b011", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.45 }, "position": [ 0,  0,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#ff6600", "roughness": 0.2, "metalness": 0.4, "emissive": "#ff3300", "emissiveIntensity": 0.3 }, "label": "Core", "animation": { "type": "spin", "axis": [0, 1, 0], "speed": 1.0 } },
+    { "id": "b012", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0,  0,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b020", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0,  2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b021", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0,  2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "b022", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 0,  2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c000", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2, -2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c001", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2, -2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c002", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2, -2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c010", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  0, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c011", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  0,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c012", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  0,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c020", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  2, -2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c021", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  2,  0], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } },
+    { "id": "c022", "type": "primitive", "geometry": { "type": "sphere", "radius": 0.35 }, "position": [ 2,  2,  2], "scale": [1,1,1], "material": { "type": "standard", "color": "#3377ff", "roughness": 0.3, "metalness": 0.2 }, "animation": { "type": "none" } }
+  ]
+}

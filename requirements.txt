@@ -1,3 +1,6 @@
+# Note: `record_audio` is a local function in voice/recorder.py, not a pip package.
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
 openai-whisper==20250625
 sounddevice==0.5.5
 numpy==2.4.2
@@ -5,4 +8,4 @@ google-generativeai==0.5.4
 pydantic==2.6.4
 python-dotenv==1.0.1
 requests==2.31.0
-pytest>=8.0
+pytest>=8.0
