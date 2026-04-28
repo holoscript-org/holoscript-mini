@@ -1,0 +1,977 @@
+# HoloScript Mini — Complete Technical Analysis
+
+---
+
+## 1. PROJECT OVERVIEW
+
+### What This Project Does
+**HoloScript Mini** is a **real-time, gesture-controlled holographic object renderer**. It uses your webcam to track your hand, recognizes specific gestures, and responds by manipulating a 3D object (currently a square) on screen — rotating it, zooming it, or freezing it — purely through hand movements, no mouse or keyboard required.
+
+### Type of Application
+- **Desktop application** (no web, no server, no database)
+- **Multi-threaded**: Two parallel threads — one reads the camera and interprets gestures, the other draws the scene at 30 FPS
+- **Computer Vision + Real-time Rendering pipeline**
+
+### Technologies Used
+| Technology | Role |
+|---|---|
+| **Python 3.7+** | Primary language |
+| **OpenCV (`cv2`)** | Camera capture, frame drawing, window display |
+| **MediaPipe Tasks Vision API** | AI-based hand landmark detection (21-point model) |
+| **NumPy** | Matrix math for rotation, normalization, smoothing |
+| **threading** | Separates gesture detection from rendering |
+| **math** | Trigonometric rotation calculations |
+| **collections.deque** | Ring buffers for logs and scene history |
+| **pathlib.Path** | Cross-platform file path resolution |
+
+---
+
+## 2. COMPLETE FOLDER STRUCTURE EXPLANATION
+
+```
+holoscript-mini/
+│
+├── main.py                          ← Entry point: starts engine + renderer
+├── hand_landmarker.task             ← Binary AI model (MediaPipe, ~7.8MB)
+├── GESTURE_ENGINE_IMPLEMENTATION.md ← Developer documentation
+├── README.md                        ← Project readme
+├── .gitignore                       ← Git ignore rules
+├── .venv/                           ← Python virtual environment
+│
+├── gesture/                         ← Everything about hand detection
+│   ├── gesture_engine.py            ← The brain: detects gestures, drives scene
+│   ├── __init__.py                  ← Exports GestureEngine for import
+│   ├── README.md                    ← Module readme
+│   │
+│   ├── camera/                      ← Camera hardware settings
+│   │   ├── camera_config.py         ← Constants: index, width, height
+│   │   └── camera_manager.py        ← Helper functions: init, read, release
+│   │
+│   ├── classification/              ← Rule-based gesture recognition
+│   │   ├── gesture_classifier.py    ← GestureClassifier: tip-vs-PIP logic
+│   │   └── demo_live_gestures.py    ← Standalone demo runner (with debounce)
+│   │
+│   ├── processing/                  ← Landmark math utilities (stubs, not used in main flow)
+│   │   ├── geometry_utils.py        ← Placeholder: distance, angle, vector
+│   │   ├── landmark_processor.py    ← Placeholder: process/normalize
+│   │   └── smoothing_utils.py       ← Placeholder: window-based smoother
+│   │
+│   ├── tracking/                    ← Config for tracking parameters (stub)
+│   │   ├── hand_tracker.py          ← Placeholder HandTracker class
+│   │   └── tracking_config.py       ← Confidence thresholds, max hands
+│   │
+│   ├── calibration/                 ← Per-user calibration (stub)
+│   │   ├── calibration_manager.py   ← Placeholder: save/load profiles
+│   │   └── calibration_profile.json ← Default user profile data
+│   │
+│   └── debug/                       ← Debug tooling (stubs)
+│       ├── debug_logger.py          ← Placeholder: log landmarks, gestures
+│       └── visual_overlay.py        ← Placeholder: draw overlay on frame
+│
+└── core/                            ← Shared state and future subsystems
+    ├── __init__.py
+    ├── state/                       ← Thread-safe shared blackboard
+    │   ├── scene_state.py           ← SceneState class + singleton
+    │   └── scene_grammar.py         ← JSON schema for future scene objects
+    │
+    ├── utils/                       ← Global config constants
+    │   └── config.py                ← Window size, FPS, camera distance
+    │
+    ├── gesture/                     ← Reserved: empty, not yet used
+    ├── gui/                         ← Reserved: empty, not yet used
+    ├── render/                      ← Reserved: empty, not yet used
+    └── voice/                       ← Reserved: empty, not yet used (LLM/speech planned)
+```
+
+### Why This Structure?
+The project is designed as a **team module system**:
+- `gesture/` is **"Member 3's module"** (gesture detection)
+- `core/state/` is the **shared blackboard** all future modules write to
+- `core/voice/`, `core/gui/`, `core/render/` are **reserved slots** for future Voice/LLM and full 3D renderer modules
+- The stub files (`hand_tracker.py`, `smoothing_utils.py`, etc.) represent **planned future work** documented in the structure
+
+---
+
+## 3. FILE-BY-FILE DEEP EXPLANATION
+
+---
+
+### File: `main.py`
+
+**1. Purpose**
+Entry point that connects the gesture engine to the visual renderer in a two-thread architecture.
+
+**2. Problem it solves**
+Without threading, reading camera + running AI + rendering at 30 FPS would block each other. This file solves it by running gesture detection in a background daemon thread and keeping the render loop on the main thread.
+
+**3. Step-by-step code walkthrough**
+
+```python
+# Lines 14-19: Imports
+import sys, math, time, numpy as np, cv2
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))  # Adds project root to Python path
+```
+This makes `from gesture.gesture_engine import GestureEngine` work regardless of where you run the script from.
+
+```python
+from core.state.scene_state import scene_state     # The shared blackboard singleton
+from gesture.gesture_engine import GestureEngine   # The AI-driven detector
+```
+
+**4. Classes & Functions**
+
+#### `SimpleRenderer` class (Lines 32–166)
+This is an **OpenCV-based 2D renderer**. It renders a rotating square that responds to `scene_state`.
+
+##### `_square_corners()` → `np.ndarray` shape (4,2)
+Returns the four corners of a unit square at `(±1, ±1)`:
+```
+[-1,-1], [1,-1], [1,1], [-1,1]
+```
+This is in **"normalized space"** — coordinates before scale or position are applied.
+
+##### `_rotate_corners(corners, angle_deg)` → `np.ndarray`
+Applies a standard **2D rotation matrix**:
+```
+[cos θ  -sin θ]   [x]
+[sin θ   cos θ] × [y]
+```
+- `angle_deg` comes from `scene_state.rotation_y` (updated by gesture engine)
+- The `corners @ rot.T` does matrix multiplication: each of the 4 corner points gets rotated
+
+##### `_to_screen(corners, scale)` → `np.ndarray` shape (4,1,2)
+Converts normalized coordinates to actual pixel positions:
+1. `half = BASE_HALF * scale` → scales the base size (100px) by the zoom factor
+2. `pts = corners * half` → stretches unit corners to real pixel size
+3. `pts[:,0] += cx; pts[:,1] += cy` → centers the square at `(400, 300)` (middle of 800×600 canvas)
+4. `.reshape((-1, 1, 2))` → reshapes to the format OpenCV's `polylines` expects
+
+##### `_draw_frame(rotation_y, scale, frozen, gesture)` → `np.ndarray`
+Constructs one complete frame:
+1. Creates a black `800×600×3` canvas (uint8 NumPy array)
+2. Draws a dark grid every 40px for depth effect
+3. **Picks color based on state**:
+   - `frozen` → Blue `(80, 80, 255)`
+   - `gesture == "ROTATE"` → Yellow-cyan `(0, 220, 255)` *(BGR order!)*
+   - `gesture == "ZOOM"` → Green `(0, 255, 100)`
+   - default → Grey `(200, 200, 200)`
+4. Draws the outline with `cv2.polylines` and a dimmed fill with `cv2.fillPoly`
+5. Overlays **HUD text**: gesture name, rotation angle, scale factor
+6. If frozen, also draws `"[ FROZEN ]"` text above the square
+
+##### `run()` — The main render loop
+```python
+while True:
+    t_start = time.time()
+    rotation_y, scale, _explode, frozen = scene_state.get_render_params()  # Atomic read
+    gesture = scene_state.current_gesture
+    if frozen:
+        rotation_y = self._last_rotation_y  # Stop the rotation from advancing
+    else:
+        self._last_rotation_y = rotation_y  # Cache last good rotation
+    frame = self._draw_frame(...)
+    cv2.imshow("HoloScript Renderer", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'): break
+    # FPS limiter: sleep the remaining time to maintain ~30 FPS
+    elapsed = time.time() - t_start
+    if (sleep_time := frame_period - elapsed) > 0:
+        time.sleep(sleep_time)
+```
+Key insight: `get_render_params()` reads all 4 transform values **under a single lock** so the renderer never sees a half-updated state.
+
+**5. Entry Point (Lines 173–181)**
+```python
+if __name__ == "__main__":
+    engine = GestureEngine()
+    engine.start_thread()    # ← camera loop runs in background thread (daemon)
+    try:
+        renderer = SimpleRenderer()
+        renderer.run()       # ← blocks the main thread at 30 FPS
+    finally:
+        engine.stop()        # ← called even on crash/keyboard interrupt
+```
+
+**6. Data Flow**
+```
+[GestureEngine thread] → writes to scene_state → [SimpleRenderer main thread] reads scene_state
+```
+
+---
+
+### File: `gesture/gesture_engine.py`
+
+**1. Purpose**
+The core intelligence of the project. This file contains the `GestureEngine` class that: opens the webcam, runs every frame through MediaPipe's hand AI model, extracts smooth features from 21 hand landmarks, classifies the gesture, and writes the result into `scene_state`.
+
+**2. Problem it solves**
+Raw MediaPipe output is **jittery and noisy**. Moving your hand 1mm produces landmark fluctuations. The engine solves this with a multi-layer smoothing pipeline before any gesture decision is made.
+
+---
+
+#### Constructor `__init__()` (Lines 40–102)
+
+**MediaPipe setup block:**
+```python
+if MEDIAPIPE_TASKS_AVAILABLE and _MODEL_PATH:
+    base_options = mp_tasks.BaseOptions(model_asset_path=_MODEL_PATH, delegate=CPU)
+    options = mp_vision.HandLandmarkerOptions(
+        running_mode=VIDEO,   # ← VIDEO mode requires monotonic timestamps
+        num_hands=1,
+        min_hand_detection_confidence=0.7,
+        min_hand_presence_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+    self.hand_landmarker = mp_vision.HandLandmarker.create_from_options(options)
+```
+The `VIDEO` running mode is chosen (not `LIVE_STREAM`) because the engine manually controls frame delivery and needs synchronous results back.
+
+**Model path resolution (Lines 28–34):**
+```python
+_MODEL_PATH = next(
+    (str(p) for p in [_MODULE_DIR / "hand_landmarker.task",
+                       _MODULE_DIR.parent / "hand_landmarker.task"]
+     if p.exists()),
+    None
+)
+```
+It searches two locations — the `gesture/` folder and the project root — and uses whichever exists first. Falls back gracefully if neither is found.
+
+**Smoothing state variables:**
+```python
+self.smoothing_alpha = 0.7          # Landmark-level EMA alpha
+self._prev_pinch = None             # Previous smoothed pinch strength
+self._prev_avg_curl = None          # Previous smoothed curl value
+self._prev_center = None            # Previous smoothed palm center
+self.motion_alpha = 0.7             # Motion delta EMA alpha
+```
+These are the **exponential moving average (EMA)** state holders. Each one remembers the "previous smoothed value" so the next frame can blend with it.
+
+---
+
+#### `_smooth_landmarks(current_landmarks)` (Lines 124–147)
+
+**What it does:** Applies EMA across all 21 landmarks simultaneously.
+
+**Formula for each landmark coordinate:**
+```
+smoothed.x = α * current.x + (1-α) * prev.x
+           = 0.7 * current + 0.3 * previous
+```
+
+**Why α=0.7?** This weights the **current frame at 70%** and the past at 30%. This keeps the feel responsive while filtering out single-frame jitter. A lower alpha (like 0.3) would feel sluggish; a higher one (0.9) would be jittery.
+
+**On first call** (`prev_landmarks is None`): returns current landmarks unchanged and sets them as the baseline.
+
+---
+
+#### `_normalize_landmarks(landmarks)` (Lines 169–195)
+
+**What it does:** Makes landmarks **position-invariant and scale-invariant**.
+
+**Step 1 — Compute palm size:**
+```python
+wrist = landmarks[0]          # Landmark 0 = wrist
+middle_mcp = landmarks[9]     # Landmark 9 = middle finger base joint
+palm_size = sqrt((mcp.x - wrist.x)² + (mcp.y - wrist.y)² + (mcp.z - wrist.z)²)
+```
+The wrist → middle knuckle distance is used as a **reference scale**. This is roughly constant for a given person regardless of how close they hold their hand to the camera.
+
+**Step 2 — Normalize every landmark:**
+```python
+n.x = (lm.x - wrist.x) / palm_size
+n.y = (lm.y - wrist.y) / palm_size
+n.z = (lm.z - wrist.z) / palm_size
+```
+After this, the wrist is at `(0,0,0)` and all other points are in units of "palm lengths". **This makes gesture features hand-size invariant** — a child's small hand and an adult's large hand produce the same normalized values.
+
+Guard against division by zero: `if palm_size < 1e-6: palm_size = 1e-6`.
+
+---
+
+#### `_extract_features(norm_landmarks)` (Lines 197–245)
+
+**What it does:** Converts the normalized 21-landmark skeleton into a small dictionary of **continuous, smoothed scalar features** that capture what the hand is doing.
+
+##### Pinch Strength Calculation:
+```python
+raw_dist = distance(norm_landmarks[4], norm_landmarks[8])  # thumb tip to index tip
+pinch_curr = 1.0 - clip(raw_dist, 0, 1)    # Invert: small distance = high pinch
+pinch_strength = 0.7 * prev_pinch + 0.3 * pinch_curr    # EMA smooth
+pinch_active = pinch_strength > 0.75        # Threshold gate
+```
+- Landmark 4 = thumb tip, Landmark 8 = index tip
+- When they're touching: `raw_dist ≈ 0` → `pinch_curr ≈ 1.0`
+- The EMA prevents pinch from instantly triggering/releasing
+
+##### Per-Finger Curl Calculation:
+```python
+index_curl = clip(1.0 - magnitude(norm_landmarks[8]), 0, 1)
+```
+In normalized space, the wrist is the origin. So the **magnitude** (distance from origin) of a fingertip = how far the tip is from the wrist. When the finger is extended, the tip magnitude is large → `1 - large = small curl`. When curled, the tip is close to the wrist → `1 - small = large curl`.
+
+##### Average Curl → Fist Detection:
+```python
+avg_curl = (index_curl + middle_curl + ring_curl + pinky_curl) / 4
+fist_active = avg_curl > 0.85    # All 4 fingers curled
+```
+
+**Final returned dictionary:**
+```python
+{
+    "pinch_strength": float,   # 0=open, 1=fully pinched (smoothed)
+    "pinch_active": bool,      # True if pinching hard enough
+    "avg_curl": float,         # 0=all open, 1=all curled (smoothed)
+    "fist_active": bool,       # True if making a fist
+    "index_curl": float,
+    "middle_curl": float,
+    "ring_curl": float,
+    "pinky_curl": float,
+}
+```
+
+---
+
+#### `_compute_and_store_pose(smoothed_landmarks, features, confidence)` (Lines 247–313)
+
+**What it does:** Computes a **stable palm center**, movement deltas, and wrist orientation, then stores the full pose in thread-safe variables.
+
+##### Stable Palm Center (Lines 264–279):
+```python
+_PALM = [0, 5, 9, 13, 17]   # Wrist + 4 knuckle bases
+cx_curr = average of x for these 5 points
+cx = 0.6 * prev_center.x + 0.4 * cx_curr   # EMA, alpha=0.4 (more stable)
+dx = cx - prev_center.x                      # Frame-to-frame displacement
+```
+Using **5 palm base landmarks** (not just 1 point) makes the center very stable — individual finger movements don't shift it. Alpha=0.4 for center (vs 0.7 for landmarks) makes it **more lagged but smoother**, which is what you want for controlling a 3D scene.
+
+##### Palm Direction Vector (Lines 281–289):
+```python
+vx = middle_mcp.x - wrist.x    # Direction from wrist to middle knuckle
+vmag = sqrt(vx²+vy²+vz²)
+vx, vy, vz = vx/vmag, ...      # Normalize to unit vector
+```
+This gives the **orientation of the palm** (though it isn't used in the current gesture-to-scene mapping — it's there for future use like rotating in 3D space).
+
+##### Gesture Label Assignment:
+```python
+label = (
+    "FIST"     if features["fist_active"]  else
+    "GRABBING" if features["pinch_active"] else
+    "OPEN_HAND"
+)
+```
+Priority: FIST > PINCH/GRABBING > OPEN_HAND. This prevents ambiguous states.
+
+##### Thread-Safe Store:
+```python
+with self.thread_lock:
+    self._current_pose = pose
+    self.current_gesture = label
+    self.gesture_confidence = confidence
+```
+
+---
+
+#### `_apply_gesture_to_scene(pose)` (Lines 366–412)
+
+**What it does:** Translates hand pose data into `SceneState` mutations. This is the **gesture → 3D action** mapping layer.
+
+##### 4-Layer Stability System:
+
+**Layer 1 — Confidence filter:**
+```python
+if pose["confidence"] < 0.6: return   # Ignore uncertain detections
+```
+
+**Layer 2 — Motion delta EMA smoothing:**
+```python
+dx = 0.7 * pose["dx"] + 0.3 * prev_dx   # Smooth frame-to-frame motion
+dy = 0.7 * pose["dy"] + 0.3 * prev_dy
+```
+Even after landmark smoothing, raw `dx`/`dy` can be spiky. This second pass of EMA on the **deltas** further stabilizes scene updates.
+
+**Layer 3 — Dead zone filter:**
+```python
+dead_zone = 0.01
+if abs(dx) < dead_zone: dx = 0.0   # Suppress tiny trembles
+```
+Any motion smaller than 1% of the frame width is ignored. This prevents the scene from drifting when the hand is "held still."
+
+**Layer 4 — Gesture-to-action dispatch:**
+```python
+if pinch:
+    scene_state.rotation_y += dx * 200     # Horizontal hand motion → rotation
+    scene_state.current_gesture = "ROTATE"
+elif fist:
+    scene_state.frozen = True              # Close fist → freeze
+    scene_state.current_gesture = "FIST"
+elif avg_curl < 0.2:                       # Clearly open (curl < 20%)
+    new_scale = scene_state.scale + dy * 3
+    scene_state.scale = max(0.5, min(3.0, new_scale))  # Clamped zoom
+    scene_state.current_gesture = "ZOOM"
+```
+
+**Why `dx * 200`?** `dx` is in normalized image space (0.0 to 1.0). Moving from left to right edge is `dx ≈ 1.0`. Without a multiplier, `rotation_y += 1.0` per frame → barely visible. `* 200` gives a full 200° rotation sweep across the screen width, which feels natural.
+
+**Why `dy * 3`?** Zoom is more sensitive — a top-to-bottom sweep gives `3.0` scale change, going from `0.5x` to `3.0x` zoom. The `max/min` clamp ensures the object never disappears or fills the whole screen.
+
+---
+
+#### `_process_frame_tasks_api(frame)` (Lines 421–457) — The Per-Frame Pipeline
+
+This is the **most important method**. Called every camera frame:
+
+```
+1. Convert BGR frame → RGB (MediaPipe requires RGB)
+2. Wrap as mp.Image
+3. Increment timestamp by 33ms (≈30 FPS monotonic clock)
+4. Call hand_landmarker.detect_for_video(image, timestamp)
+5. If hand detected:
+   a. _draw_landmarks_on_frame()   → visual feedback in camera window
+   b. _convert_mediapipe_landmarks() → convert to legacy format
+   c. _smooth_landmarks()          → EMA smooth all 21 points
+   d. _normalize_landmarks()       → palm-size normalize
+   e. _extract_features()          → compute pinch, curl, etc.
+   f. _compute_and_store_pose()    → center, deltas, orientation
+   g. _apply_gesture_to_scene()    → update SceneState
+6. If no hand:
+   → Reset all smoothing state (prev values → None)
+```
+
+The reset on "no hand" is critical — if stale smoothing values persisted, the next detected hand would blend with old data and produce wrong gestures.
+
+---
+
+#### `_process_frame_fallback(frame)` (Lines 492–530)
+
+When MediaPipe is not available (model file missing), a **basic computer vision fallback** is used:
+1. Convert to grayscale, apply threshold
+2. Find contours (edge-detected regions)
+3. Take the largest contour (assumed to be the hand)
+4. Create **mock landmarks** arranged in a circle around the detected blob
+5. These are fed through the same `_normalize_landmarks → _extract_features → _compute_and_store_pose` pipeline
+
+This means the code structure doesn't collapse without MediaPipe — it degrades gracefully, though gesture recognition quality drops significantly.
+
+---
+
+#### Threading Methods
+
+**`start_thread()`** (Lines 609–621):
+```python
+self.thread = threading.Thread(target=self._camera_loop, daemon=True)
+self.thread.start()
+```
+`daemon=True` means: if the main thread (renderer) exits, Python automatically kills this background thread without needing an explicit `stop()` call. (Though `stop()` is still called in `finally` for clean resource release.)
+
+**`stop()`** (Lines 623–642):
+```python
+self.running = False               # Signal the loop to exit
+self.thread.join(timeout=2.0)      # Wait max 2s for clean exit
+self.cap.release()                 # Release camera hardware
+self.hand_landmarker.close()       # Free MediaPipe model resources
+cv2.destroyAllWindows()
+```
+
+---
+
+### File: `core/state/scene_state.py`
+
+**1. Purpose**
+A **thread-safe shared blackboard** (also known as the Blackboard Pattern). All subsystem threads read and write to this single object to communicate state without passing objects directly between threads.
+
+**2. Problem it solves**
+Without a centralized, thread-safe state store, the gesture thread and render thread would need complex message passing. Instead, every thread reads/writes `scene_state` directly, and the RLock guarantees no data race.
+
+**3. The Lock: `threading.RLock`**
+An `RLock` (Reentrant Lock) allows the **same thread to acquire the lock multiple times** without deadlocking. This matters when, for example, one getter internally calls another getter — both try to acquire the lock, but since they're in the same thread, it's fine.
+
+**4. All Properties (with type validation)**
+
+| Property | Type | Validation | Owner |
+|---|---|---|---|
+| `scene_json` | `dict \| None` | Must be dict or None | Voice/LLM thread |
+| `transcript` | `str` | Must be str | Voice/LLM thread |
+| `rotation_y` | `float` | Auto-cast to float | Gesture thread |
+| `scale` | `float` | Must be > 0 (positive) | Gesture thread |
+| `explode` | `float` | Clamped to [0.0, 1.0] | Gesture thread |
+| `frozen` | `bool` | Auto-cast to bool | Gesture thread |
+| `current_gesture` | `str` | Must be str | Gesture thread |
+| `current_frame` | `np.ndarray \| None` | Shape (360,18,3), uint8 | Renderer thread |
+| `logs` | `deque[str]` | maxlen=100 ring buffer | Any thread |
+| `scene_history` | `deque[dict]` | maxlen=20 | Voice/LLM thread |
+
+**5. Key design: `scene_json` auto-pushes to history**
+```python
+@scene_json.setter
+def scene_json(self, value):
+    if self._scene_json is not None:      # If there was a previous scene
+        self._scene_history.append(self._scene_json)   # Push it to history
+    self._scene_json = value              # Set new scene
+```
+This implements **automatic undo support** — every scene change is recorded so it can be rolled back.
+
+**6. `get_render_params()` — Atomic multi-read**
+```python
+def get_render_params(self):
+    with self._lock:
+        return self._rotation_y, self._scale, self._explode, self._frozen
+```
+Reading all 4 values under **one lock acquisition** guarantees the renderer never sees rotation from one "frame" and scale from the next. They're always a consistent snapshot.
+
+**7. The Singleton**
+```python
+scene_state = SceneState()   # Module-level instance
+```
+When any file does `from core.state.scene_state import scene_state`, they all get the **exact same object** because Python's module system caches imports. No dependency injection needed.
+
+---
+
+### File: `core/state/scene_grammar.py`
+
+**1. Purpose**
+Defines the **expected JSON schema** for scene descriptions that a future Voice/LLM module would produce.
+
+**2. What it contains:**
+```python
+SCENE_GRAMMAR = {
+    "objects": [
+        {
+            "id": "string",
+            "type": "sphere | cube | cylinder | ring | label",
+            "position": [0.0, 0.0, 0.0],
+            "color": [1.0, 1.0, 1.0],
+            "animation": "none | orbit",
+            "orbit_center": [0.0, 0.0, 0.0],
+            "orbit_speed": 0.0
+        }
+    ]
+}
+```
+This is a **contract document** — it tells developers what format the LLM must produce and what the renderer must be able to consume. Currently not used at runtime, but establishes the system's architectural intent.
+
+---
+
+### File: `gesture/classification/gesture_classifier.py`
+
+**1. Purpose**
+A **rule-based gesture classifier** — an alternative/earlier approach to gesture recognition that doesn't use continuous feature smoothing. Used in `demo_live_gestures.py`.
+
+**2. Key Logic**
+
+##### Finger Open/Closed Check:
+```python
+def is_finger_open(self, landmarks, tip_index, pip_index):
+    tip = landmarks[tip_index]
+    pip = landmarks[pip_index]
+    return tip.y < pip.y    # In image coords, y increases downward
+```
+The **PIP** (Proximal Inter-Phalangeal) joint is the middle knuckle. If the fingertip's y < PIP's y, the fingertip is **above** (i.e., higher on screen) the knuckle → finger is extended.
+
+> **Assumption:** Camera is held such that fingers point upward in the frame (default portrait use).
+
+##### Thumb Check (different logic):
+```python
+def is_thumb_open(self, landmarks):
+    return landmarks[THUMB_TIP].x > landmarks[THUMB_IP].x
+```
+The thumb extends **sideways** (not upward), so it uses x-axis instead of y-axis.
+
+##### Decision Tree:
+```
+if thumb-index distance < 0.05:  → PINCH
+elif index + middle open, rest closed:  → V_SIGN
+elif only index open:   → POINT
+elif 4+ fingers open:   → OPEN_PALM
+elif 0 fingers open:    → FIST
+else:                   → UNKNOWN
+```
+
+**Difference from `gesture_engine.py`'s approach:** This classifier uses a **hard threshold** (tip above PIP → open). The engine uses **continuous pinch strength + curl scores with EMA smoothing** — much more robust for real-time scene control.
+
+---
+
+### File: `gesture/classification/demo_live_gestures.py`
+
+**1. Purpose**
+A **standalone demo** (can be run directly) that shows live gesture classification with debounce, used for testing the `GestureClassifier` in isolation.
+
+**2. The Debounce Logic (Lines 206–226):**
+```python
+if gesture != self.last_gesture:
+    self.last_gesture = gesture
+    self.gesture_start_time = current_time   # Reset timer
+else:
+    if current_time - self.gesture_start_time > 0.5:   # 500ms stability
+        if self.stable_gesture != gesture:
+            self.stable_gesture = gesture    # Confirm gesture
+            print("Gesture confirmed:", gesture)
+```
+**Plain English:** "Only call a gesture 'confirmed' if it has been seen continuously for at least 0.5 seconds. If the gesture changes, restart the 0.5-second clock."
+
+This prevents the UI from flashing between gestures during transitions.
+
+---
+
+### File: `gesture/camera/camera_config.py`
+
+Constants only:
+```python
+CAMERA_INDEX = 0      # Which webcam (0 = default)
+FRAME_WIDTH = 640     # 640×480 = standard webcam resolution
+FRAME_HEIGHT = 480
+PRINT_INTERVAL = 60   # Print debug every 60 frames (~2 seconds at 30 FPS)
+```
+
+---
+
+### File: `gesture/camera/camera_manager.py`
+
+Utility functions (used by the standalone demo, not by `gesture_engine.py` which does this internally):
+- `initialize_camera()` → Opens webcam, sets resolution, returns `VideoCapture`
+- `read_frame(cap, counter)` → Reads + flips frame, prints shape every `PRINT_INTERVAL` frames
+- `release_camera(cap)` → Releases capture + destroys all windows
+
+---
+
+### File: `core/utils/config.py`
+
+Global rendering constants:
+```python
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+TARGET_FPS = 30
+CAMERA_DISTANCE = 5.0   # For future 3D camera positioning
+```
+
+---
+
+### Stub Files (Not yet implemented)
+
+| File | Class/Functions | Status |
+|---|---|---|
+| `gesture/processing/geometry_utils.py` | `calculate_distance`, `calculate_angle`, `calculate_vector` | Empty stubs |
+| `gesture/processing/landmark_processor.py` | `LandmarkProcessor.process_landmarks`, `.normalize_landmarks` | Empty stubs |
+| `gesture/processing/smoothing_utils.py` | `LandmarkSmoother.smooth`, `.reset` | Empty stubs |
+| `gesture/tracking/hand_tracker.py` | `HandTracker.process_frame`, `.get_landmarks` | Empty stubs |
+| `gesture/debug/debug_logger.py` | `DebugLogger.log_landmarks`, `.log_gesture` | Empty stubs |
+| `gesture/debug/visual_overlay.py` | `VisualOverlay.draw_landmarks`, `.draw_gesture_info`, `.draw_fps` | Empty stubs |
+| `gesture/calibration/calibration_manager.py` | `CalibrationManager.start_calibration`, `.save_profile`, `.load_profile` | Empty stubs |
+
+These serve as **architecture placeholders** — they document what future implementations will provide.
+
+---
+
+### File: `gesture/calibration/calibration_profile.json`
+
+Data file defining default calibration:
+```json
+{
+  "version": "1.0",
+  "calibration_data": {
+    "hand_size_reference": 1.0,
+    "distance_threshold": 0.1,
+    "angle_threshold": 15.0
+  },
+  "user_preferences": {
+    "sensitivity": "medium",
+    "handedness": "right"
+  }
+}
+```
+Not loaded at runtime currently, but the `CalibrationManager` stub is designed to use it.
+
+---
+
+### File: `hand_landmarker.task` (Binary, 7.8MB)
+
+Pre-trained **MediaPipe hand landmark detection neural network** by Google. It analyzes video frames and outputs 21 3D keypoints representing the hand skeleton. This file is the AI "brain" — without it, the system falls back to basic contour detection.
+
+---
+
+## 4. EXECUTION FLOW
+
+### Full Step-by-Step Flow After Running `python main.py`
+
+```
+1.  Python loads main.py
+2.  sys.path.insert → project root added to Python path
+3.  `scene_state = SceneState()` is created as a module-level singleton
+    → rotation_y=0, scale=1.0, frozen=False, gesture="NONE"
+
+4.  GestureEngine() is constructed:
+    a. Resolves model path → finds hand_landmarker.task at project root
+    b. Initializes MediaPipe HandLandmarker in VIDEO mode
+    c. Sets smoothing_alpha=0.7, motion_alpha=0.7
+    d. All _prev_* variables = None (no smoothing history yet)
+
+5.  engine.start_thread() is called:
+    a. _initialize_camera() → opens webcam 0 at 640×480×30FPS
+    b. camera loop starts in daemon background thread
+
+====== BACKGROUND THREAD (Gesture Engine) ======
+
+6.  _camera_loop() starts, loop begins:
+    a. cap.read() → gets raw BGR frame
+    b. cv2.flip(frame, 1) → mirror it (natural self-view)
+    c. _process_frame_tasks_api(frame):
+        i.   BGR → RGB conversion
+        ii.  Wrap as mp.Image
+        iii. frame_timestamp_ms += 33
+        iv.  hand_landmarker.detect_for_video(image, timestamp)
+        v.   If hand detected:
+             - _draw_landmarks_on_frame() → dots + lines on camera feed
+             - _convert_mediapipe_landmarks() → convert to uniform format
+             - _smooth_landmarks() → EMA over 21 (x,y,z) pairs
+             - _normalize_landmarks() → translate to wrist origin, divide by palm size
+             - _extract_features() → compute pinch_strength, avg_curl, etc. (with EMA)
+             - _compute_and_store_pose() → compute palm center (5-point avg), dx/dy, orientation
+             - _apply_gesture_to_scene():
+                 ·  Confidence filter (drop if < 0.6)
+                 ·  EMA smooth dx/dy again
+                 ·  Dead-zone filter (zero out if < 0.01)
+                 ·  If pinch_active: scene_state.rotation_y += dx * 200
+                 ·  If fist_active: scene_state.frozen = True
+                 ·  If open hand: scene_state.scale clamped zoom
+        vi.  If no hand: reset all _prev_* to None
+    d. cv2.imshow("Gesture Engine", frame) → shows camera with landmarks
+    e. Every 10 frames: print FPS + current pose to console
+    f. waitKey(1) checks for 'q' to stop
+
+====== MAIN THREAD (Renderer) ======
+
+7.  SimpleRenderer().run() starts:
+    a. target_fps=30, frame_period=1/30 ≈ 33ms
+    b. Loop:
+        i.   t_start = time.time()
+        ii.  scene_state.get_render_params() → atomic read: (rotation_y, scale, explode, frozen)
+        iii. scene_state.current_gesture → read gesture label
+        iv.  If frozen: use cached _last_rotation_y (don't advance)
+             Else: cache rotation_y in _last_rotation_y
+        v.   _draw_frame(rotation_y, scale, frozen, gesture):
+             - Black 800×600 canvas
+             - Grid lines every 40px
+             - Pick color based on gesture
+             - _square_corners() → 4 unit corners
+             - _rotate_corners() → apply 2D rotation matrix
+             - _to_screen() → scale + center to pixels
+             - cv2.polylines() → draw outline
+             - cv2.fillPoly() → draw dim fill
+             - HUD text: gesture, rotation angle, scale factor
+             - If frozen: draw "[ FROZEN ]" text
+        vi.  cv2.imshow("HoloScript Renderer", frame)
+        vii. waitKey(1) → check for 'q'
+        viii.Sleep remaining time to maintain 30 FPS
+
+8.  On 'q' press (either window):
+    Main thread: breaks render loop → cv2.destroyAllWindows()
+    finally block: engine.stop()
+        → self.running = False
+        → thread.join(timeout=2.0)
+        → cap.release()
+        → hand_landmarker.close()
+        → cv2.destroyAllWindows()
+```
+
+---
+
+## 5. API & DATA FLOW
+
+This project has **no HTTP API** — it's a local desktop system. The "API" surface is the `SceneState` properties and the `GestureEngine` public methods:
+
+### GestureEngine Public Interface
+
+| Method | Description | Returns |
+|---|---|---|
+| `__init__()` | Sets up MediaPipe + smoothing state | — |
+| `start()` | Blocking mode (runs camera loop in main thread) | — |
+| `start_thread()` | Background thread mode | — |
+| `stop()` | Graceful shutdown, resource cleanup | — |
+| `get_current_gesture()` | Thread-safe read of current gesture | `{"gesture": str, "confidence": float}` |
+| `get_hand_pose()` | Thread-safe full pose snapshot | `dict` with center, dx/dy, pinch, curl, etc. — or `None` |
+| `update_state(obj)` | Push gesture state into external object | — |
+
+### Scene State Data Flow
+
+```
+Webcam frame (640×480 BGR)
+    ↓ flip (mirror)
+    ↓ BGR→RGB
+    ↓ MediaPipe detect_for_video()
+    ↓ 21 3D landmarks (x,y,z ∈ [0,1])
+    ↓ _smooth_landmarks() [EMA α=0.7]
+    ↓ _normalize_landmarks() [wrist=origin, ÷palm_size]
+    ↓ _extract_features() [pinch=1-dist(4,8), curl=1-|tip|, EMA]
+    ↓ _compute_and_store_pose() [5-point palm center, deltas, direction]
+    ↓ _apply_gesture_to_scene() [confidence+EMA+deadzone filters]
+    ↓
+SceneState.rotation_y += dx * 200  (PINCH gesture)
+SceneState.scale = clamp(scale + dy*3, 0.5, 3.0)  (OPEN HAND)
+SceneState.frozen = True  (FIST gesture)
+    ↓ (read by renderer 30x/second)
+SimpleRenderer._draw_frame(rotation_y, scale, frozen, gesture)
+    ↓
+OpenCV window: "HoloScript Renderer" — 800×600 canvas with rotating square
+```
+
+---
+
+## 6. CORE LOGIC BREAKDOWN
+
+### The 3-Stage Smoothing Pipeline
+This is the most sophisticated part of the codebase. Raw webcam hand tracking is inherently noisy. The engine applies smoothing at 3 different levels:
+
+| Stage | What's Smoothed | Alpha | Purpose |
+|---|---|---|---|
+| Stage 1 | 21 landmark (x,y,z) separately | 0.7 | Remove per-frame jitter |
+| Stage 2 | pinch strength, avg curl | 0.7 | Smooth gesture feature values |
+| Stage 3 | palm center + dx, dy motion deltas | 0.6 / 0.7 | Smooth scene update triggers |
+
+**EMA Formula:** `smoothed = α × current + (1-α) × previous`
+
+### The 4-Layer Safety System for Scene Updates
+Before any value changes in `scene_state`, the engine passes through:
+1. **Confidence filter:** < 60% confidence → skip entire frame
+2. **Motion EMA:** smooth raw dx/dy delta (α=0.7)
+3. **Dead zone:** |delta| < 0.01 → treat as zero
+4. **Gesture priority:** FIST > PINCH > OPEN HAND (no ambiguous overlap)
+
+### The Normalization Algorithm
+```
+After normalization:
+  - Wrist landmark is exactly at (0, 0, 0)
+  - Middle MCP is at approximately (0, 1, 0) (1 palm-length away)
+  - Fingertips of extended fingers: magnitude ≈ 2.5–3.0 palm-lengths
+  - Fingertips of curled fingers: magnitude ≈ 0.5–1.0 palm-lengths
+```
+
+### The Curl Score Algorithm
+```
+curl = 1.0 - magnitude(fingertip in normalized space)
+     = 1.0 - sqrt(tip.x² + tip.y² + tip.z²)
+
+Extended finger: magnitude ≈ 3 → curl ≈ -2 → clip to 0 (fully open)
+Curled finger:   magnitude ≈ 0.5 → curl ≈ 0.5 (partially curled)
+Fully curled:    magnitude ≈ 0 → curl ≈ 1 (fist)
+```
+
+---
+
+## 7. DEPENDENCY & CONFIG ANALYSIS
+
+### Key Dependencies (installed in `.venv/`)
+
+| Library | Version | Used For |
+|---|---|---|
+| **mediapipe** | Latest | Hand landmark AI model, Tasks Vision API |
+| **opencv-python (cv2)** | Latest | Camera capture, frame processing, display |
+| **numpy** | Latest | Matrix math (rotation matrix, normalization, EMA) |
+
+### Implicit Standard Library
+
+| Module | Used For |
+|---|---|
+| `threading` | Background camera thread, RLock for SceneState |
+| `math` | `cos`, `sin`, `radians` for 2D rotation |
+| `time` | FPS timing, frame period enforcement |
+| `collections.deque` | Ring buffer for logs (maxlen=100) and history (maxlen=20) |
+| `pathlib.Path` | Cross-platform model file path resolution |
+| `typing` | Type hints (`Dict`, `Optional`, `Tuple`, `Any`, `List`) |
+
+### Config Files Summary
+
+| Config | Location | Values |
+|---|---|---|
+| Camera | `gesture/camera/camera_config.py` | Index=0, 640×480, print every 60 frames |
+| Renderer | `core/utils/config.py` | 800×600 window, 30 FPS, camera_distance=5.0 |
+| Tracking | `gesture/tracking/tracking_config.py` | confidence=0.5, max_hands=2, complexity=1 |
+| Calibration | `gesture/calibration/calibration_profile.json` | sensitivity=medium, right-handed |
+
+---
+
+## 8. SIMPLIFIED EXPLANATION (FOR PRESENTATION)
+
+### "What is HoloScript Mini?"
+
+> **HoloScript Mini is a program that watches your hand through your webcam, figures out what gesture you're making, and uses that gesture to rotate, zoom, or freeze a 3D object on screen — completely hands-free.**
+
+---
+
+### How it works — in plain words:
+
+**Step 1: See the hand**
+The webcam captures 30 frames per second. Google's MediaPipe AI reads each frame and places 21 tiny dots on your hand — one at each joint and fingertip.
+
+**Step 2: Understand the hand**
+The program looks at the distances between these dots to figure out:
+- *Are the thumb and index finger close?* → You're **pinching**
+- *Are all 4 fingers curled toward the palm?* → You're making a **fist**
+- *Are all fingers stretched open?* → **Open hand**
+
+**Step 3: Smooth the noise**
+Raw AI output jumps around frame-to-frame. Before deciding what gesture you're doing, the program runs the data through a **smoothing formula** — it takes 70% of the current reading and 30% of the previous reading, blending them together to eliminate jitter.
+
+**Step 4: Apply the gesture**
+- **Pinch + move left/right** → The square on screen rotates
+- **Open hand + move up/down** → The square zooms in or out
+- **Fist** → Everything freezes
+
+**Step 5: Draw the scene**
+At the same time, the renderer reads these values 30 times per second and draws a rotating square using a **rotation matrix** — the same math used in 3D games and graphics.
+
+**Step 6: Two things at once**
+The gesture detection runs in a **background thread** (like a separate worker) while the renderer runs in the main thread. They share information through a central "blackboard" (`SceneState`) protected by a lock so they never interfere with each other.
+
+---
+
+### What makes this impressive?
+1. **No buttons, no mouse** — 100% gesture-driven control
+2. **Real AI** — uses a Google-trained neural network (the `.task` model file)
+3. **Smooth and stable** — triple-layer noise filtering prevents jitter
+4. **Thread-safe** — two systems running simultaneously without crashing
+5. **Extensible by design** — placeholders for Voice, LLM, and full 3D renderer are already built into the structure
+
+---
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────┐
+│         WEBCAM (640×480)        │
+└────────────────┬────────────────┘
+                 │ frames at 30 FPS
+                 ▼
+┌─────────────────────────────────┐
+│      GESTURE ENGINE THREAD      │
+│                                 │
+│  MediaPipe AI (21 landmarks)    │
+│       ↓                         │
+│  EMA Landmark Smoothing         │
+│       ↓                         │
+│  Palm Normalization             │
+│       ↓                         │
+│  Pinch/Curl Feature Extraction  │
+│       ↓                         │
+│  Confidence + Dead-zone Filter  │
+│       ↓                         │
+│  Writes to SceneState           │
+└──────────────┬──────────────────┘
+               │   thread-safe RLock
+               ▼
+┌─────────────────────────────────┐
+│       SCENE STATE (Blackboard)  │
+│  rotation_y | scale | frozen    │
+│  current_gesture | scene_json   │
+└──────────────┬──────────────────┘
+               │   read 30x/second
+               ▼
+┌─────────────────────────────────┐
+│     RENDERER (MAIN THREAD)      │
+│                                 │
+│  rotation matrix applied        │
+│  square drawn on 800×600 canvas │
+│  HUD text overlaid              │
+│  cv2.imshow displayed           │
+└─────────────────────────────────┘
+```
