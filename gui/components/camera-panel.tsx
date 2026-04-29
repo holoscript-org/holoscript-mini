@@ -3,257 +3,222 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { HoloPanel } from "./holo-panel"
 import { Video, VideoOff, Hand } from "lucide-react"
+import { classifyGesture, type GestureType, type HandLandmark } from "@/hooks/useGestureControl"
 
-interface HandLandmark {
-  x: number
-  y: number
-  z: number
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DetectedHand {
   landmarks: HandLandmark[]
   handedness: "Left" | "Right"
 }
 
-type GestureType = "PINCH" | "OPEN_PALM" | "FIST" | "POINTING" | "NONE"
+// ─── MediaPipe CDN paths ──────────────────────────────────────────────────────
+// WASM runtime and model are loaded at runtime from CDN — no local files needed.
+const MP_WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm"
+const MP_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function CameraPanel({
-  onGestureDetected,
+  onFrameData,
   compact = false,
 }: {
-  onGestureDetected?: (gesture: GestureType, hands: DetectedHand[]) => void
+  /**
+   * Called each processed camera frame with the primary hand's raw landmarks,
+   * classified gesture, and DOMHighResTimeStamp.
+   * Receives empty landmarks array when no hand is detected.
+   */
+  onFrameData?: (landmarks: HandLandmark[], gesture: GestureType, nowMs: number) => void
   compact?: boolean
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef  = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [currentGesture, setCurrentGesture] = useState<GestureType>("NONE")
-  const [handsDetected, setHandsDetected] = useState(0)
-  const animationRef = useRef<number | null>(null)
-  const lastDrawTsRef = useRef(0)
   const streamRef = useRef<MediaStream | null>(null)
 
-  // Simulated hand landmarks for demo (in production, use MediaPipe Hands)
-  const simulatedHandsRef = useRef<DetectedHand[]>([])
-  const timeRef = useRef(0)
+  // MediaPipe HandLandmarker instance (null until loaded)
+  const landmarkerRef   = useRef<import("@mediapipe/tasks-vision").HandLandmarker | null>(null)
+  const mpLoadingRef    = useRef(false)
+  const lastDetectMsRef = useRef(0)
 
-  const detectGesture = useCallback((hands: DetectedHand[]): GestureType => {
-    if (hands.length === 0) return "NONE"
+  const animRafRef      = useRef<number | null>(null)
+  const lastFrameTsRef  = useRef(0)
 
-    const hand = hands[0]
-    if (!hand.landmarks || hand.landmarks.length < 21) return "NONE"
+  const [isStreaming,    setIsStreaming]    = useState(false)
+  const [currentGesture, setCurrentGesture] = useState<GestureType>("NONE")
+  const [handsDetected,  setHandsDetected]  = useState(0)
+  const [mpReady,        setMpReady]        = useState(false)
+  const [cameraError,    setCameraError]    = useState<string | null>(null)
 
-    // Simplified gesture detection based on finger positions
-    const thumb = hand.landmarks[4]
-    const index = hand.landmarks[8]
-    const middle = hand.landmarks[12]
-    const ring = hand.landmarks[16]
-    const pinky = hand.landmarks[20]
-    const wrist = hand.landmarks[0]
+  // ── MediaPipe loading ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isStreaming || mpLoadingRef.current || landmarkerRef.current) return
+    mpLoadingRef.current = true
+    let cancelled = false
 
-    // Calculate distances
-    const thumbIndexDist = Math.sqrt(
-      Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2)
-    )
-
-    const fingerSpread =
-      Math.sqrt(Math.pow(index.x - pinky.x, 2) + Math.pow(index.y - pinky.y, 2))
-
-    const fingersUp = [index, middle, ring, pinky].filter(
-      (f) => f.y < wrist.y - 0.1
-    ).length
-
-    // Detect gestures
-    if (thumbIndexDist < 0.05) return "PINCH"
-    if (fingersUp >= 4 && fingerSpread > 0.15) return "OPEN_PALM"
-    if (fingersUp <= 1 && fingerSpread < 0.1) return "FIST"
-    if (fingersUp === 1 && index.y < wrist.y - 0.15) return "POINTING"
-
-    return "NONE"
-  }, [])
-
-  const drawHandLandmarks = useCallback(
-    (ctx: CanvasRenderingContext2D, hands: DetectedHand[]) => {
-      const canvas = ctx.canvas
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-      hands.forEach((hand, handIndex) => {
-        const color = hand.handedness === "Left" ? "#00ffff" : "#00ff88"
-
-        // Draw connections
-        const connections = [
-          [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
-          [0, 5], [5, 6], [6, 7], [7, 8], // Index
-          [0, 9], [9, 10], [10, 11], [11, 12], // Middle
-          [0, 13], [13, 14], [14, 15], [15, 16], // Ring
-          [0, 17], [17, 18], [18, 19], [19, 20], // Pinky
-          [5, 9], [9, 13], [13, 17], // Palm
-        ]
-
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2
-        ctx.shadowColor = color
-        ctx.shadowBlur = 8
-
-        connections.forEach(([start, end]) => {
-          const startLandmark = hand.landmarks[start]
-          const endLandmark = hand.landmarks[end]
-
-          ctx.beginPath()
-          ctx.moveTo(startLandmark.x * canvas.width, startLandmark.y * canvas.height)
-          ctx.lineTo(endLandmark.x * canvas.width, endLandmark.y * canvas.height)
-          ctx.stroke()
+    const load = async () => {
+      try {
+        const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision")
+        const vision = await FilesetResolver.forVisionTasks(MP_WASM_URL)
+        const hl = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: MP_MODEL_URL,
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numHands: 1,
+          minHandDetectionConfidence: 0.5,
+          minHandPresenceConfidence:  0.5,
+          minTrackingConfidence:      0.5,
         })
+        if (cancelled) { hl.close(); return }
+        landmarkerRef.current = hl
+        setMpReady(true)
+        console.log("[CameraPanel] MediaPipe HandLandmarker ready")
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[CameraPanel] MediaPipe unavailable:", err)
+          setCameraError("MediaPipe failed to load")
+        }
+      } finally {
+        mpLoadingRef.current = false
+      }
+    }
 
-        // Draw landmarks
-        hand.landmarks.forEach((landmark, i) => {
-          const x = landmark.x * canvas.width
-          const y = landmark.y * canvas.height
-          const radius = i === 0 ? 6 : 4
+    load()
+    return () => {
+      cancelled = true
+      landmarkerRef.current?.close()
+      landmarkerRef.current = null
+      setMpReady(false)
+    }
+  }, [isStreaming])
 
+  // ── Canvas drawing ────────────────────────────────────────────────────────────
+  const drawLandmarks = useCallback(
+    (ctx: CanvasRenderingContext2D, hands: DetectedHand[]) => {
+      const { width, height } = ctx.canvas
+      ctx.clearRect(0, 0, width, height)
+
+      const CONNECTIONS: [number, number][] = [
+        [0,1],[1,2],[2,3],[3,4],
+        [0,5],[5,6],[6,7],[7,8],
+        [0,9],[9,10],[10,11],[11,12],
+        [0,13],[13,14],[14,15],[15,16],
+        [0,17],[17,18],[18,19],[19,20],
+        [5,9],[9,13],[13,17],
+      ]
+
+      for (const hand of hands) {
+        const color = hand.handedness === "Left" ? "#00ffff" : "#00ff88"
+        ctx.strokeStyle = color
+        ctx.lineWidth   = 2
+        ctx.shadowColor = color
+        ctx.shadowBlur  = 8
+
+        for (const [s, e] of CONNECTIONS) {
           ctx.beginPath()
-          ctx.arc(x, y, radius, 0, Math.PI * 2)
+          ctx.moveTo(hand.landmarks[s].x * width, hand.landmarks[s].y * height)
+          ctx.lineTo(hand.landmarks[e].x * width, hand.landmarks[e].y * height)
+          ctx.stroke()
+        }
+
+        for (let i = 0; i < hand.landmarks.length; i++) {
+          const lm = hand.landmarks[i]
+          const r  = i === 0 ? 6 : 4
+          ctx.beginPath()
+          ctx.arc(lm.x * width, lm.y * height, r, 0, Math.PI * 2)
           ctx.fillStyle = color
           ctx.fill()
-
-          // Add glow effect to fingertips
           if ([4, 8, 12, 16, 20].includes(i)) {
             ctx.beginPath()
-            ctx.arc(x, y, 8, 0, Math.PI * 2)
+            ctx.arc(lm.x * width, lm.y * height, 8, 0, Math.PI * 2)
             ctx.strokeStyle = color
-            ctx.lineWidth = 1
+            ctx.lineWidth   = 1
             ctx.stroke()
           }
-        })
+        }
 
-        // Draw hand label
         const wrist = hand.landmarks[0]
-        ctx.font = "12px monospace"
+        ctx.font      = "12px monospace"
         ctx.fillStyle = color
         ctx.shadowBlur = 4
-        ctx.fillText(
-          `${hand.handedness} Hand`,
-          wrist.x * canvas.width - 30,
-          wrist.y * canvas.height + 30
-        )
-      })
+        ctx.fillText(`${hand.handedness}`, wrist.x * width - 20, wrist.y * height + 30)
+      }
 
       ctx.shadowBlur = 0
     },
     []
   )
 
-  const generateSimulatedHands = useCallback(() => {
-    timeRef.current += 0.03
-    const t = timeRef.current
-
-    // Simulate one hand with natural movement
-    const baseX = 0.5 + Math.sin(t * 0.5) * 0.15
-    const baseY = 0.5 + Math.cos(t * 0.7) * 0.1
-
-    // Generate 21 landmarks for a hand
-    const landmarks: HandLandmark[] = []
-
-    // Wrist
-    landmarks.push({ x: baseX, y: baseY + 0.15, z: 0 })
-
-    // Thumb (4 landmarks)
-    for (let i = 0; i < 4; i++) {
-      landmarks.push({
-        x: baseX - 0.08 - i * 0.02,
-        y: baseY + 0.1 - i * 0.03 + Math.sin(t * 2 + i) * 0.01,
-        z: 0,
-      })
-    }
-
-    // Fingers (4 landmarks each)
-    const fingerOffsets = [0, 0.025, 0.05, 0.075]
-    for (let f = 0; f < 4; f++) {
-      const fingerX = baseX - 0.03 + f * 0.035
-      for (let i = 0; i < 4; i++) {
-        const curl = Math.sin(t * 1.5 + f * 0.5) * 0.02
-        landmarks.push({
-          x: fingerX + Math.sin(t + f) * 0.005,
-          y: baseY - i * 0.035 + curl * i,
-          z: 0,
-        })
-      }
-    }
-
-    const hands: DetectedHand[] = [
-      { landmarks, handedness: "Right" },
-    ]
-
-    // Sometimes add a second hand
-    if (Math.sin(t * 0.3) > 0.5) {
-      const leftHandLandmarks = landmarks.map((l) => ({
-        x: 1 - l.x + 0.1,
-        y: l.y + Math.sin(t) * 0.02,
-        z: l.z,
-      }))
-      hands.push({ landmarks: leftHandLandmarks, handedness: "Left" })
-    }
-
-    return hands
-  }, [])
-
+  // ── Main animation loop ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isStreaming) return
 
     const canvas = canvasRef.current
-    const video = videoRef.current
+    const video  = videoRef.current
     if (!canvas || !video) return
-
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    const animate = (ts: number) => {
-      if (ts - lastDrawTsRef.current < 50) {
-        animationRef.current = requestAnimationFrame(animate)
-        return
+    const loop = (ts: number) => {
+      animRafRef.current = requestAnimationFrame(loop)
+
+      // ~30 fps cap
+      if (ts - lastFrameTsRef.current < 33) return
+      lastFrameTsRef.current = ts
+
+      // Sync canvas size to video
+      const vw = video.videoWidth  || 640
+      const vh = video.videoHeight || 480
+      if (canvas.width !== vw || canvas.height !== vh) {
+        canvas.width  = vw
+        canvas.height = vh
       }
-      lastDrawTsRef.current = ts
 
-      // Update canvas size to match video
-      if (video.videoWidth && video.videoHeight) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-      } else {
-        canvas.width = 640
-        canvas.height = 480
+      let hands: DetectedHand[] = []
+      const nowMs = performance.now()
+
+      const hl = landmarkerRef.current
+      if (hl && video.readyState >= 2 && video.videoWidth > 0) {
+        // Real MediaPipe detection
+        if (nowMs > lastDetectMsRef.current) {
+          try {
+            const result = hl.detectForVideo(video, nowMs)
+            lastDetectMsRef.current = nowMs + 0.001  // ensure monotonic
+            if (result.landmarks?.length > 0) {
+              hands = result.landmarks.map((lmList, i) => ({
+                landmarks:  lmList.map((lm) => ({ x: lm.x, y: lm.y, z: lm.z })),
+                handedness: (result.handedness[i]?.[0]?.categoryName === "Left"
+                  ? "Left"
+                  : "Right") as "Left" | "Right",
+              }))
+            }
+          } catch {
+            // Occasionally fails on frame boundaries — ignore
+          }
+        }
       }
 
-      // Generate simulated hands (replace with MediaPipe in production)
-      const hands = generateSimulatedHands()
-      simulatedHandsRef.current = hands
-
-      // Update state
       setHandsDetected(hands.length)
-      const gesture = detectGesture(hands)
+      const primaryLandmarks = hands[0]?.landmarks ?? []
+      const gesture = classifyGesture(primaryLandmarks)
       setCurrentGesture(gesture)
 
-      // Notify parent
-      if (onGestureDetected) {
-        onGestureDetected(gesture, hands)
-      }
+      // Always notify parent — empty landmarks signals hand loss
+      onFrameData?.(primaryLandmarks, gesture, nowMs)
 
-      // Draw hand landmarks
-      drawHandLandmarks(ctx, hands)
-
-      animationRef.current = requestAnimationFrame(animate)
+      drawLandmarks(ctx, hands)
     }
 
-    animate(0)
-
+    animRafRef.current = requestAnimationFrame(loop)
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
+      if (animRafRef.current) cancelAnimationFrame(animRafRef.current)
     }
-  }, [isStreaming, detectGesture, drawHandLandmarks, generateSimulatedHands, onGestureDetected])
+  }, [isStreaming, onFrameData, drawLandmarks])
 
+  // ── Camera start / stop ───────────────────────────────────────────────────────
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -262,36 +227,39 @@ export function CameraPanel({
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         streamRef.current = stream
-        setIsStreaming(true)
       }
     } catch (err) {
-      console.error("Failed to access camera:", err)
-      // Still enable simulation mode
-      setIsStreaming(true)
+      console.warn("[CameraPanel] Camera unavailable:", err)
+      setCameraError("Camera permission or device unavailable")
+      return
     }
+    setCameraError(null)
+    setIsStreaming(true)
   }
 
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    landmarkerRef.current?.close()
+    landmarkerRef.current = null
     setIsStreaming(false)
     setHandsDetected(0)
     setCurrentGesture("NONE")
+    setMpReady(false)
+    setCameraError(null)
   }
 
-  const gestureLabels: Record<GestureType, string> = {
-    PINCH: "Pinch - Zoom",
-    OPEN_PALM: "Open Palm - Reset",
-    FIST: "Fist - Grab",
-    POINTING: "Pointing - Select",
-    NONE: "No Gesture",
+  // ── Gesture labels ────────────────────────────────────────────────────────────
+  const GESTURE_LABELS: Record<GestureType, string> = {
+    PINCH:     "Pinch — Rotate",
+    OPEN_PALM: "Open Palm — Zoom",
+    FIST:      "Fist — Freeze (hold)",
+    POINT:     "Point — Navigate",
+    NONE:      "No Gesture",
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <HoloPanel title="Gesture Control" statusIndicator className="h-full">
       <div
@@ -299,7 +267,7 @@ export function CameraPanel({
           compact ? "h-full min-h-0" : "aspect-video"
         }`}
       >
-        {/* Video feed */}
+        {/* Live video feed */}
         <video
           ref={videoRef}
           autoPlay
@@ -311,14 +279,14 @@ export function CameraPanel({
           style={{ transform: "scaleX(-1)" }}
         />
 
-        {/* Canvas overlay for hand tracking */}
+        {/* Landmark overlay canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
           style={{ transform: "scaleX(-1)" }}
         />
 
-        {/* Placeholder when not streaming — full-panel click target */}
+        {/* Enable camera button */}
         {!isStreaming && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
             <button
@@ -332,13 +300,28 @@ export function CameraPanel({
               <span className="text-xs font-mono text-muted-foreground group-hover:text-primary transition-colors tracking-widest uppercase">
                 Enable Camera
               </span>
+              {cameraError && (
+                <span className="max-w-[220px] text-center text-[10px] font-mono text-red-400/80">
+                  {cameraError}
+                </span>
+              )}
             </button>
           </div>
         )}
 
-        {/* Stop button — only shown while streaming */}
+        {/* Stop button */}
         {isStreaming && (
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-2 right-2 flex items-center gap-2">
+            {mpReady && (
+              <span className="text-[9px] font-mono text-green-400/80 bg-black/60 px-1.5 py-0.5 rounded border border-green-400/30">
+                MediaPipe
+              </span>
+            )}
+            {!mpReady && (
+              <span className="text-[9px] font-mono text-yellow-400/60 bg-black/60 px-1.5 py-0.5 rounded border border-yellow-400/20 animate-pulse">
+                Loading…
+              </span>
+            )}
             <button
               onClick={stopCamera}
               className="p-2 rounded border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/25 transition-colors"
@@ -349,14 +332,14 @@ export function CameraPanel({
           </div>
         )}
 
-        {/* Gesture detection label */}
+        {/* Gesture status bar */}
         {isStreaming && (
           <div className="absolute bottom-2 left-2 right-2">
             <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/30 bg-background/90 backdrop-blur-sm">
               <div className="flex items-center gap-2">
                 <Hand className="w-4 h-4 text-primary" />
                 <span className="text-xs font-mono text-muted-foreground">
-                  Hands: {handsDetected}
+                  {handsDetected} hand{handsDetected !== 1 ? "s" : ""}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -368,21 +351,19 @@ export function CameraPanel({
                   }`}
                 />
                 <span className="text-xs font-mono text-primary">
-                  {gestureLabels[currentGesture]}
+                  {GESTURE_LABELS[currentGesture]}
                 </span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Scanning overlay effect */}
+        {/* Scan-line animation */}
         {isStreaming && (
           <div className="absolute inset-0 pointer-events-none">
             <div
-              className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"
-              style={{
-                animation: "scan 2s linear infinite",
-              }}
+              className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-40"
+              style={{ animation: "scan 2s linear infinite" }}
             />
           </div>
         )}
@@ -390,12 +371,8 @@ export function CameraPanel({
 
       <style jsx>{`
         @keyframes scan {
-          0% {
-            top: 0;
-          }
-          100% {
-            top: 100%;
-          }
+          0%   { top: 0 }
+          100% { top: 100% }
         }
       `}</style>
     </HoloPanel>

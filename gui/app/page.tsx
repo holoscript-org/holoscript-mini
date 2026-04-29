@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useCallback } from "react"
 import { POVSimulation } from "@/components/pov-simulation"
 import { CameraPanel } from "@/components/camera-panel"
 import { CommandPanel } from "@/components/command-panel"
@@ -8,69 +8,31 @@ import { PerformanceLogs } from "@/components/performance-logs"
 import { SceneConfiguration } from "@/components/scene-configuration"
 import { ThreeScene } from "@/components/ThreeScene"
 import { useWebGLSceneData } from "@/hooks/useWebGLSceneData"
-
-type GestureType = "PINCH" | "OPEN_PALM" | "FIST" | "POINTING" | "NONE"
-
-interface DetectedHand {
-  landmarks: { x: number; y: number; z: number }[]
-  handedness: "Left" | "Right"
-}
+import { useGestureControl } from "@/hooks/useGestureControl"
 
 export default function HologramDashboard() {
-  const [simulationZoom, setSimulationZoom] = useState(1)
-  const [simulationRotation, setSimulationRotation] = useState({ x: 0, y: 0 })
-
-  // WebGL-only runtime: both scene and cylindrical frame are client-side.
+  // ── Scene data (JSON, POV frame, logs) — no longer used for transforms ──────
   const {
     frame,
     scene,
     logs,
-    status,
     connected,
     selectedScene,
     sceneOptions,
     setSelectedScene,
   } = useWebGLSceneData()
 
-  const handleGestureDetected = useCallback(
-    (gesture: GestureType, hands: DetectedHand[]) => {
-      switch (gesture) {
-        case "PINCH":
-          setSimulationZoom((prev) => Math.min(prev + 0.02, 2))
-          break
-        case "OPEN_PALM":
-          setSimulationZoom(1)
-          setSimulationRotation({ x: 0, y: 0 })
-          break
-        case "FIST":
-          setSimulationZoom((prev) => Math.max(prev - 0.02, 0.5))
-          break
-        default:
-          break
-      }
-      if (hands.length === 2) {
-        const hand1 = hands[0].landmarks[0]
-        const hand2 = hands[1].landmarks[0]
-        setSimulationRotation({
-          x: (hand2.y - hand1.y) * 100,
-          y: (hand2.x - hand1.x) * 100,
-        })
-      }
-    },
-    []
-  )
+  // ── Browser-side gesture transforms ──────────────────────────────────────────
+  const { state: gestureState, processFrame, reset } = useGestureControl()
 
-  const handleCommandSend = useCallback((command: string) => {
-    const lowerCommand = command.toLowerCase()
-    if (lowerCommand.includes("zoom in")) {
-      setSimulationZoom((prev) => Math.min(prev + 0.2, 2))
-    } else if (lowerCommand.includes("zoom out")) {
-      setSimulationZoom((prev) => Math.max(prev - 0.2, 0.5))
-    } else if (lowerCommand.includes("reset")) {
-      setSimulationZoom(1)
-      setSimulationRotation({ x: 0, y: 0 })
-    }
-  }, [])
+  // ── Command panel integration (text commands affect transforms) ───────────────
+  const handleCommandSend = useCallback(
+    (command: string) => {
+      const cmd = command.toLowerCase()
+      if (cmd.includes("reset")) reset()
+    },
+    [reset]
+  )
 
   return (
     <div className="h-screen overflow-hidden bg-background p-3 md:p-4">
@@ -95,7 +57,7 @@ export default function HologramDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Backend connection indicator */}
+          {/* Scene connection indicator */}
           <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-muted-foreground">
             <span
               className={`w-2 h-2 rounded-full transition-colors ${
@@ -106,6 +68,8 @@ export default function HologramDashboard() {
             />
             {connected ? "WebGL Scene Loaded" : "Loading Scene"}
           </div>
+
+          {/* Scene selector */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono text-primary/60">Scene JSON</span>
             <select
@@ -120,53 +84,70 @@ export default function HologramDashboard() {
               ))}
             </select>
           </div>
-          {/* Active gesture badge */}
-          {status.gesture !== "NONE" && (
+
+          {/* Live gesture badge */}
+          {gestureState.gesture !== "NONE" && (
             <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded border border-primary/30 bg-primary/10 text-xs font-mono text-primary">
-              {status.gesture}
+              {gestureState.gesture}
             </div>
           )}
-          <button className="px-3 py-1.5 text-xs font-mono border border-primary/30 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-            Settings
+
+          {/* Frozen indicator */}
+          {gestureState.frozen && (
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded border border-blue-500/50 bg-blue-500/10 text-xs font-mono text-blue-400">
+              FROZEN
+            </div>
+          )}
+
+          <button
+            onClick={reset}
+            className="px-3 py-1.5 text-xs font-mono border border-primary/30 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          >
+            Reset
           </button>
         </div>
       </header>
 
       <div className="grid h-[calc(100vh-86px)] min-h-0 grid-cols-1 xl:grid-cols-[1fr_1.08fr] gap-3 md:gap-4">
-        {/* Left: WebGL renderer driven by selected JSON scene */}
+        {/* Left: WebGL 3D scene — transforms driven by browser gesture */}
         <div className="min-h-0">
           <ThreeScene
             scene={scene}
-            rotationY={status.rotation_y}
-            scale={status.scale}
-            frozen={status.frozen}
+            rotationY={gestureState.rotationY}
+            scale={gestureState.scale}
+            frozen={gestureState.frozen}
           />
         </div>
 
-        {/* Right: Figma-style stacked layout */}
+        {/* Right: stacked panel layout */}
         <div className="grid min-h-0 grid-rows-[minmax(0,1.28fr)_minmax(0,0.78fr)_minmax(0,0.78fr)] gap-3 md:gap-4">
-          {/* Top row: 360 projection + gesture control */}
+          {/* Top: POV simulation + gesture camera */}
           <div className="grid min-h-0 grid-cols-[0.85fr_1.15fr] gap-3 md:gap-4">
             <div className="min-h-0">
               <POVSimulation
-                zoom={simulationZoom}
-                rotation={simulationRotation}
-                onZoomChange={setSimulationZoom}
+                zoom={gestureState.scale}
+                rotation={{ x: 0, y: gestureState.rotationY }}
+                onZoomChange={() => {}}
                 frame={frame}
                 compact
               />
             </div>
             <div className="min-h-0">
-              <CameraPanel onGestureDetected={handleGestureDetected} compact />
+              {/*
+                CameraPanel calls onFrameData on every processed frame.
+                useGestureControl.processFrame translates landmarks → rotationY/scale/frozen.
+                No backend involved.
+              */}
+              <CameraPanel onFrameData={processFrame} compact />
             </div>
           </div>
 
-          {/* Middle row: command + voice */}
+          {/* Middle: command panel */}
           <div className="min-h-0">
             <CommandPanel onCommandSend={handleCommandSend} />
           </div>
 
-          {/* Bottom row: scene + logs */}
+          {/* Bottom: scene config + logs */}
           <div className="grid min-h-0 grid-cols-2 gap-3 md:gap-4">
             <div className="min-h-0">
               <SceneConfiguration liveScene={scene} />
@@ -178,7 +159,7 @@ export default function HologramDashboard() {
         </div>
       </div>
 
-      {/* Background grid overlay */}
+      {/* Background grid */}
       <div
         className="fixed inset-0 pointer-events-none opacity-5 -z-10"
         style={{

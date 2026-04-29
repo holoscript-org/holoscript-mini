@@ -623,8 +623,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--scene", "-s",
         default=_SOLAR_SYSTEM_PATH,
-        help="Path to scene JSON file (default: solar_system.json)"
+        help="Path to scene JSON file (default: solar_system.json)",
+    )
+    parser.add_argument(
+        "--no-gesture",
+        action="store_true",
+        help="Skip gesture engine (useful when no camera is available)",
     )
     args = parser.parse_args()
+
+    if not args.no_gesture:
+        try:
+            from gesture.gesture_engine import GestureEngine
+            _ge = GestureEngine()
+            _ge.start_thread()
+            print("[Renderer] Gesture engine started in background thread")
+        except Exception as _exc:
+            print(f"[Renderer] Gesture engine unavailable — continuing without it: {_exc}")
+
     renderer = Renderer(scene_path=args.scene)
     renderer.run()

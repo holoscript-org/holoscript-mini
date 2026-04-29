@@ -11,6 +11,30 @@ interface CommandEntry {
   type: "user" | "system"
 }
 
+type BrowserSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+}
+
+type BrowserSpeechRecognitionEvent = {
+  results: {
+    [resultIndex: number]: {
+      [alternativeIndex: number]: {
+        transcript: string
+      }
+    }
+  }
+}
+
+type SpeechRecognitionWindow = Window & {
+  webkitSpeechRecognition?: new () => BrowserSpeechRecognition
+}
+
 export function CommandPanel({
   onCommandSend,
 }: {
@@ -34,7 +58,7 @@ export function CommandPanel({
   const [isListening, setIsListening] = useState(false)
   const [mounted, setMounted] = useState(false)
   const historyRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -49,8 +73,9 @@ export function CommandPanel({
 
   // Setup speech recognition
   useEffect(() => {
-    if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition
+    const speechWindow = window as SpeechRecognitionWindow
+    if (speechWindow.webkitSpeechRecognition) {
+      const SpeechRecognition = speechWindow.webkitSpeechRecognition
       recognitionRef.current = new SpeechRecognition()
       recognitionRef.current.continuous = false
       recognitionRef.current.interimResults = false

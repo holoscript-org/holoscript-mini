@@ -14,7 +14,7 @@
  */
 
 import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Canvas, useFrame } from "@react-three/fiber"
+import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, OrbitControls, PerspectiveCamera, Text, useGLTF, useTexture } from "@react-three/drei"
 import * as THREE from "three"
 import {
@@ -378,6 +378,16 @@ function FPSMeter({ fpsRef }: { fpsRef: React.MutableRefObject<number> }) {
   return null
 }
 
+function SceneInvalidator({ rotationY, scale, frozen }: { rotationY: number; scale: number; frozen: boolean }) {
+  const invalidate = useThree((state) => state.invalidate)
+
+  useEffect(() => {
+    invalidate()
+  }, [invalidate, rotationY, scale, frozen])
+
+  return null
+}
+
 // ─── Debug panel (outside Canvas) ────────────────────────────────────────────
 
 function DebugPanel({
@@ -528,6 +538,7 @@ export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: 
         <Canvas
           shadows
           dpr={[1, 2]}
+          frameloop={frozen ? "demand" : "always"}
           gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0, antialias: true }}
           onCreated={({ gl }) => {
             gl.shadowMap.enabled = true
@@ -546,7 +557,7 @@ export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: 
           <FrozenContext.Provider value={frozen}>
             <group
               rotation={[0, THREE.MathUtils.degToRad(rotationY), 0]}
-              scale={scale}
+              scale={[scale, scale, scale]}
             >
               <Suspense fallback={null}>
                 {rootObjects.map((obj) => (
@@ -557,6 +568,7 @@ export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: 
           </FrozenContext.Provider>
 
           <FPSMeter fpsRef={fpsRef} />
+          <SceneInvalidator rotationY={rotationY} scale={scale} frozen={frozen} />
         </Canvas>
       </ObjectRegistry.Provider>
 

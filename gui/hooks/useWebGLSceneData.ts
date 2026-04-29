@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { fetchStatus, Frame, SceneStatus } from "@/lib/api"
+import { Frame, SceneStatus } from "@/lib/api"
 import { buildWebglPovFrame } from "@/hooks/webglPov"
 import { validateScene } from "@/lib/sceneFactory"
 
@@ -56,8 +56,6 @@ export function useWebGLSceneData(): WebGLSceneData {
   const [frame, setFrame] = useState<Frame>(null)
   const [scene, setScene] = useState<Record<string, unknown>>({})
   const [logs, setLogs] = useState<string[]>([])
-  const [status, setStatus] = useState<SceneStatus>(DEFAULT_STATUS)
-  const prevStatusRef = useRef<SceneStatus>(DEFAULT_STATUS)
   const [connected, setConnected] = useState(false)
   const [selectedScene, setSelectedScene] = useState("")
   const [sceneOptions, setSceneOptions] = useState<SceneOption[]>([])
@@ -67,31 +65,6 @@ export function useWebGLSceneData(): WebGLSceneData {
       const next = [...prev, `[${timestamp()}] ${message}`]
       return next.slice(-100)
     })
-  }, [])
-
-  // Poll /status at 50 ms — only update state when values change meaningfully.
-  useEffect(() => {
-    const poll = async () => {
-      const next = await fetchStatus()
-      // Merge so transcript always has a defined value even if backend omits it.
-      const merged: SceneStatus = { transcript: "", ...next }
-      const prev = prevStatusRef.current
-
-      const changed =
-        Math.abs(merged.rotation_y - prev.rotation_y) > 0.5 ||
-        Math.abs(merged.scale - prev.scale) > 0.005 ||
-        merged.frozen !== prev.frozen ||
-        merged.gesture !== prev.gesture
-
-      if (changed) {
-        prevStatusRef.current = merged
-        setStatus(merged)
-        console.log("gesture", merged)
-      }
-    }
-
-    const id = setInterval(poll, 50)
-    return () => clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -183,11 +156,6 @@ export function useWebGLSceneData(): WebGLSceneData {
     sceneRef.current = validated.scene
   }, [validated.scene])
 
-  const rotationYRef = useRef(0)
-  useEffect(() => {
-    rotationYRef.current = status.rotation_y
-  }, [status.rotation_y])
-
   useEffect(() => {
     if (validated.fatal) return
 
@@ -198,7 +166,7 @@ export function useWebGLSceneData(): WebGLSceneData {
     const loop = (nowMs: number) => {
       if (!lastTickMs || nowMs - lastTickMs >= 66) {
         const t = (nowMs - startMs) / 1000
-        setFrame(buildWebglPovFrame(sceneRef.current, t, rotationYRef.current))
+        setFrame(buildWebglPovFrame(sceneRef.current, t, 0))
         lastTickMs = nowMs
       }
       raf = requestAnimationFrame(loop)
@@ -214,7 +182,7 @@ export function useWebGLSceneData(): WebGLSceneData {
     frame,
     scene,
     logs,
-    status,
+    status: DEFAULT_STATUS,
     connected,
     selectedScene,
     sceneOptions,

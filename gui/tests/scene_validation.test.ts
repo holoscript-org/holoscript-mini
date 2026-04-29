@@ -1,7 +1,7 @@
 /**
  * scene_validation.test.ts
  *
- * Validates every JSON file in renderer/assets/examples/ against the strict
+ * Validates every JSON file in core/assets/examples/ against the strict
  * scene schema defined in sceneFactory.ts.
  *
  * Run:  npm test
@@ -23,7 +23,7 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const EXAMPLES_DIR = join(__dirname, "../../renderer/assets/examples")
+const EXAMPLES_DIR = join(__dirname, "../../core/assets/examples")
 
 function loadJson(filename: string): Record<string, unknown> {
   const raw = readFileSync(join(EXAMPLES_DIR, filename), "utf-8")
