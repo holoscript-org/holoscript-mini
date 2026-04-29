@@ -132,6 +132,93 @@ class ScenePlan(BaseModel):
         return self
 
 
+VALID_SCENE_TYPES = {
+    "atom", "molecule", "solar_system", "mechanical", "organic",
+    "abstract", "geometric", "crystalline", "astronomical",
+    "system", "structure", "vehicle", "character", "landscape", "diagram",
+}
+
+VALID_ANIMATION_TYPES = {"none", "orbit", "spin"}
+
+
+def _repair_plan_data(plan_data: dict, command: str) -> dict:
+    """Normalize loose model output before validation."""
+    repaired = dict(plan_data)
+
+    scene_type = str(repaired.get("scene_type", "abstract")).strip().lower()
+    if scene_type not in VALID_SCENE_TYPES:
+        lowered = command.lower()
+        if any(token in lowered for token in ("atom", "electron", "proton", "nucleus")):
+            scene_type = "atom"
+        elif any(token in lowered for token in ("molecule", "water", "dna", "helix", "chemical")):
+            scene_type = "molecule" if "water" in lowered or "molecule" in lowered else "organic"
+        elif any(token in lowered for token in ("planet", "solar", "orbit", "star", "moon")):
+            scene_type = "solar_system"
+        elif any(token in lowered for token in ("heart", "brain", "organ", "organic")):
+            scene_type = "organic"
+        elif any(token in lowered for token in ("grid", "lattice", "crystal", "crystalline")):
+            scene_type = "crystalline"
+        else:
+            scene_type = "abstract"
+    repaired["scene_type"] = scene_type
+
+    components = repaired.get("components", [])
+    if not isinstance(components, list):
+        components = []
+    unique_components: list[str] = []
+    seen_components: set[str] = set()
+    for component in components:
+        text = str(component).strip()
+        if not text or text in seen_components:
+            continue
+        seen_components.add(text)
+        unique_components.append(text)
+    repaired["components"] = unique_components
+
+    repeat_counts = repaired.get("repeat_counts", {})
+    if not isinstance(repeat_counts, dict):
+        repeat_counts = {}
+    cleaned_counts: dict[str, int] = {}
+    for key, value in repeat_counts.items():
+        key_text = str(key).strip()
+        if not key_text:
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count < 0:
+            continue
+        cleaned_counts[key_text] = count
+    repaired["repeat_counts"] = cleaned_counts
+
+    animation_types = repaired.get("animation_types", [])
+    if not isinstance(animation_types, list):
+        animation_types = []
+    cleaned_animations: list[str] = []
+    for animation in animation_types:
+        anim = str(animation).strip().lower()
+        if anim in VALID_ANIMATION_TYPES and anim not in cleaned_animations:
+            cleaned_animations.append(anim)
+    if not cleaned_animations:
+        cleaned_animations = ["none"]
+    repaired["animation_types"] = cleaned_animations
+
+    if "use_mesh" in repaired:
+        repaired["use_mesh"] = bool(repaired["use_mesh"])
+    else:
+        repaired["use_mesh"] = scene_type == "organic" and any(
+            token in command.lower() for token in ("heart", "brain", "organ")
+        )
+
+    try:
+        repaired["num_objects"] = int(repaired.get("num_objects", 1))
+    except (TypeError, ValueError):
+        repaired["num_objects"] = 1
+
+    return repaired
+
+
 # ---------------------------------------------------------------------------
 # Planner Implementation
 # ---------------------------------------------------------------------------
@@ -283,6 +370,8 @@ def plan(command: str) -> ScenePlan | None:
         if json_obj is None:
             logger.error("planner: failed to extract JSON from response")
             return None
+
+        json_obj = _repair_plan_data(json_obj, command)
 
         plan_obj = ScenePlan.model_validate(json_obj)
         elapsed = time.perf_counter() - start
