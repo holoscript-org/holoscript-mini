@@ -1,0 +1,295 @@
+"""llm/planner.py
+Stage 1 of the Member 1 pipeline: Extract abstract scene plan from user command.
+
+The planner does NOT generate final JSON. Instead, it produces a structured
+plan that describes what the scene should contain:
+  - scene_type (atom, molecule, solar_system, etc.)
+  - num_objects (estimated count)
+  - components (list of what to build)
+  - animation_types (which objects should move)
+  - hierarchy_needed (do we need parent-child relationships?)
+  - use_mesh (should any part use a mesh model instead of primitives?)
+  - complexity (low/medium/high)
+
+The parametric generator then uses this plan to compute exact coordinates.
+The builder then uses both plan + coordinates to generate final objects.
+"""
+
+import json
+import time
+import os
+import requests
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field, field_validator, model_validator
+from core.utils.logger import get_logger
+
+load_dotenv()
+
+logger = get_logger("planner")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.1-8b-instant"
+
+
+# ---------------------------------------------------------------------------
+# Planner Output Schema
+# ---------------------------------------------------------------------------
+
+class ScenePlan(BaseModel):
+    """Abstract scene plan extracted from user command."""
+
+    scene_type: str
+    # Examples: "atom", "molecule", "solar_system", "mechanical", "organic", "abstract"
+
+    description: str
+    # Plain language summary of what the user wants
+
+    num_objects: int
+    # Estimated total object count (including animations, decorative elements)
+
+    components: list[str]
+    # List of major components. Use unique role names, not repeated items.
+    # These become the basis for deterministic naming and parametric generation.
+
+    repeat_counts: dict[str, int] = Field(default_factory=dict)
+    # Optional counts for repeated components. Example: {"planet": 8, "moon": 1}
+
+    animation_types: list[str]
+    # Which animation types appear. Options: "none", "orbit", "spin"
+
+    hierarchy_needed: bool
+    # True if parent-child relationships are needed (e.g., moon orbits earth)
+
+    use_mesh: bool
+    # True if any component should use a mesh model (organic shapes, complex geometry)
+
+    complexity: str
+    # "low" (1-5 objects), "medium" (6-15), "high" (16-20)
+
+    @field_validator("scene_type")
+    @classmethod
+    def validate_scene_type(cls, v: str) -> str:
+        valid = {
+            "atom", "molecule", "solar_system", "mechanical", "organic",
+            "abstract", "geometric", "crystalline", "astronomical",
+            "system", "structure", "vehicle", "character", "landscape", "diagram"
+        }
+        if v not in valid:
+            raise ValueError(f"scene_type must be one of {valid}, got {v}")
+        return v
+
+    @field_validator("animation_types")
+    @classmethod
+    def validate_animation_types(cls, v: list[str]) -> list[str]:
+        valid = {"none", "orbit", "spin"}
+        for anim_type in v:
+            if anim_type not in valid:
+                raise ValueError(f"animation_type must be one of {valid}, got {anim_type}")
+        return v
+
+    @field_validator("complexity")
+    @classmethod
+    def validate_complexity(cls, v: str) -> str:
+        valid = {"low", "medium", "high"}
+        if v not in valid:
+            raise ValueError(f"complexity must be one of {valid}, got {v}")
+        return v
+
+    @field_validator("num_objects")
+    @classmethod
+    def validate_num_objects(cls, v: int) -> int:
+        if not (1 <= v <= 20):
+            raise ValueError(f"num_objects must be between 1 and 20, got {v}")
+        return v
+
+    @field_validator("repeat_counts")
+    @classmethod
+    def validate_repeat_counts(cls, v: dict[str, int]) -> dict[str, int]:
+        for key, value in v.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("repeat_counts keys must be non-empty strings")
+            if not isinstance(value, int) or value < 0:
+                raise ValueError(f"repeat_counts[{key!r}] must be a non-negative integer")
+        return v
+
+    @model_validator(mode="after")
+    def normalize_components(self) -> "ScenePlan":
+        if not self.components:
+            raise ValueError("components must not be empty")
+
+        counts: dict[str, int] = dict(self.repeat_counts)
+        normalized: list[str] = []
+
+        for component in self.components:
+            if component not in normalized:
+                normalized.append(component)
+            else:
+                counts[component] = counts.get(component, 1) + 1
+
+        self.components = normalized
+        self.repeat_counts = counts
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Planner Implementation
+# ---------------------------------------------------------------------------
+
+def _extract_json_from_text(text: str) -> dict | None:
+    """Extract JSON from LLM response (may contain markdown or explanation)."""
+    try:
+        start_idx = text.find("{")
+        if start_idx == -1:
+            return None
+        end_idx = text.rfind("}") + 1
+        if end_idx <= start_idx:
+            return None
+        json_str = text[start_idx:end_idx]
+        return json.loads(json_str)
+    except Exception:
+        return None
+
+
+def _call_groq(prompt: str) -> str:
+    """Call Groq API with the given prompt."""
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY not found in environment.")
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a scene planner. Output ONLY valid JSON. No markdown. No explanations.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    }
+
+    response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
+    response.raise_for_status()
+    result = response.json()
+    return result["choices"][0]["message"]["content"]
+
+
+def plan(command: str) -> ScenePlan | None:
+    """
+    Extract an abstract scene plan from a user command.
+
+    Args:
+        command: User request (e.g., "show a hydrogen atom")
+
+    Returns:
+        ScenePlan object if successful, None if planning fails
+
+    Raises:
+        RuntimeError: If GROQ_API_KEY is missing
+        requests.exceptions.RequestException: If API call fails
+    """
+    from llm.prompt_templates import build_planner_prompt
+
+    # If no GROQ_API_KEY is configured, use a local deterministic fallback
+    # so tests and offline development can proceed.
+    if not GROQ_API_KEY:
+        logger.info("planner: GROQ_API_KEY not found, using local fallback planner")
+        try:
+            from llm.planner import _local_plan  # type: ignore
+        except Exception:
+            # define inline fallback
+            def _local_plan(cmd: str) -> dict:
+                c = cmd.lower()
+                if "hydrogen" in c or "atom" in c:
+                    return {
+                        "scene_type": "atom",
+                        "description": "A hydrogen atom with a central proton and an orbiting electron",
+                        "num_objects": 3,
+                        "components": ["proton", "electron", "orbital_ring"],
+                        "repeat_counts": {},
+                        "animation_types": ["none", "orbit"],
+                        "hierarchy_needed": False,
+                        "use_mesh": False,
+                        "complexity": "low",
+                    }
+                if "solar" in c or "planet" in c or "sun" in c:
+                    return {
+                        "scene_type": "solar_system",
+                        "description": "A solar system with the sun and orbiting planets",
+                        "num_objects": 9,
+                        "components": ["sun", "planet", "moon"],
+                        "repeat_counts": {"planet": 8},
+                        "animation_types": ["none", "orbit"],
+                        "hierarchy_needed": True,
+                        "use_mesh": False,
+                        "complexity": "medium",
+                    }
+                if "dna" in c or "helix" in c:
+                    return {
+                        "scene_type": "organic",
+                        "description": "A DNA double helix with intertwined strands",
+                        "num_objects": 12,
+                        "components": ["strand_left", "strand_right", "base_pair"],
+                        "repeat_counts": {"base_pair": 10},
+                        "animation_types": ["none"],
+                        "hierarchy_needed": False,
+                        "use_mesh": False,
+                        "complexity": "medium",
+                    }
+                if "heart" in c:
+                    return {
+                        "scene_type": "organic",
+                        "description": "A realistic human heart mesh",
+                        "num_objects": 1,
+                        "components": ["heart_mesh"],
+                        "repeat_counts": {},
+                        "animation_types": ["none"],
+                        "hierarchy_needed": False,
+                        "use_mesh": True,
+                        "complexity": "high",
+                    }
+                # default conservative plan
+                return {
+                    "scene_type": "abstract",
+                    "description": f"Abstract scene for: {command}",
+                    "num_objects": 3,
+                    "components": ["core", "accent", "ring"],
+                    "repeat_counts": {},
+                    "animation_types": ["none"],
+                    "hierarchy_needed": False,
+                    "use_mesh": False,
+                    "complexity": "low",
+                }
+
+        try:
+            plan_dict = _local_plan(command)  # type: ignore
+            plan_obj = ScenePlan.model_validate(plan_dict)
+            logger.info("planner: local plan scene_type=%s num_objects=%d", plan_obj.scene_type, plan_obj.num_objects)
+            return plan_obj
+        except Exception as e:
+            logger.error("planner: local fallback failed: %s", e)
+            return None
+
+    prompt = build_planner_prompt(command)
+    start = time.perf_counter()
+
+    try:
+        raw_response = _call_groq(prompt)
+        json_obj = _extract_json_from_text(raw_response)
+
+        if json_obj is None:
+            logger.error("planner: failed to extract JSON from response")
+            return None
+
+        plan_obj = ScenePlan.model_validate(json_obj)
+        elapsed = time.perf_counter() - start
+        logger.info("planner: latency=%.1fms scene_type=%s num_objects=%d", 
+                    elapsed * 1000, plan_obj.scene_type, plan_obj.num_objects)
+        return plan_obj
+
+    except Exception as e:
+        logger.error("planner: failed to generate plan: %s", e)
+        return None
