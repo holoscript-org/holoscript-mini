@@ -1242,8 +1242,12 @@ class GestureEngine:
                     pose = self._current_pose
 
                 if pose:
+                    rot = scene_state.rotation_y
+                    scl = scene_state.scale
+                    frz = scene_state.frozen
                     print(
                         f"[{self.fps_counter:>6}] FPS:{fps:5.1f} | "
+                        f"rot={rot:+7.2f}° scale={scl:.3f} frozen={frz} | "
                         f"mode={pose['active_mode']:<8} "
                         f"gesture={pose['active_gesture']:<10} "
                         f"candidate={pose['candidate']:<10} | "

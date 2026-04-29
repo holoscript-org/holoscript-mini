@@ -194,8 +194,11 @@ class SceneState:
     def scale(self, value: float) -> None:
         """Set the uniform scale factor.
 
+        Clamped to [0.3, 4.0] — matches GestureEngine.SCALE_MIN / SCALE_MAX.
+        Enforced here so no code path can breach the gesture contract.
+
         Args:
-            value: Positive scale multiplier (converted to ``float``).
+            value: Scale multiplier (converted to ``float``).
 
         Raises:
             ValueError: If *value* is not positive.
@@ -204,7 +207,7 @@ class SceneState:
         if value <= 0.0:
             raise ValueError(f"scale must be positive, got {value}")
         with self._lock:
-            self._scale = value
+            self._scale = max(0.3, min(4.0, value))
 
     # ------------------------------------------------------------------
     # explode
