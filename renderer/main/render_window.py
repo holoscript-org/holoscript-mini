@@ -362,10 +362,10 @@ class Renderer:
             scene_state.rotation_y += 5.0
             print(f"rotation_y: {scene_state.rotation_y:.1f}")
         elif symbol == key.UP:
-            scene_state.scale = min(3.0, scene_state.scale + 0.1)
+            scene_state.scale = min(4.0, scene_state.scale + 0.1)
             print(f"scale: {scene_state.scale:.2f}")
         elif symbol == key.DOWN:
-            scene_state.scale = max(0.2, scene_state.scale - 0.1)
+            scene_state.scale = max(0.3, scene_state.scale - 0.1)
             print(f"scale: {scene_state.scale:.2f}")
         elif symbol == key.E:
             scene_state.explode = min(1.0, scene_state.explode + 0.1)
@@ -446,9 +446,9 @@ class Renderer:
         elif action == "right":
             scene_state.rotation_y += 5.0
         elif action == "up":
-            scene_state.scale = min(3.0, scene_state.scale + 0.1)
+            scene_state.scale = min(4.0, scene_state.scale + 0.1)
         elif action == "down":
-            scene_state.scale = max(0.2, scene_state.scale - 0.1)
+            scene_state.scale = max(0.3, scene_state.scale - 0.1)
         elif action == "e":
             scene_state.explode = min(1.0, scene_state.explode + 0.1)
         elif action == "r":
@@ -497,11 +497,10 @@ class Renderer:
             self._apply_control(ctrl["action"])
             self._last_control_id = ctrl["id"]
 
-        # Atomic read of scene_json + version to detect changes
-        with scene_state._lock:
-            scene_json = scene_state._scene_json
-            version    = scene_state._scene_version
+        # Detect scene changes via public API (no internal field access)
+        version = scene_state.scene_version
         if version != self._last_scene_version:
+            scene_json = scene_state.scene_json
             if scene_json is not None:
                 self._rebuild_scene(scene_json)
             self._last_scene_version = version
@@ -549,6 +548,7 @@ class Renderer:
             fps = 25.0 / total if total > 0 else 0.0
             self.fps_log.append(fps)
             print(f"FPS: {fps:.1f}")
+            print(f"[RENDER] rot={rotation_y:.2f} scale={scale:.2f} frozen={frozen}")
 
         # --- Frame extraction + cylindrical POV ---
         # For static scenes (heart), avoid expensive per-frame extraction/build.
