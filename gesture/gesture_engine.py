@@ -77,7 +77,7 @@ class GestureEngine:
     SCALE_MAX = 4.0
 
     # ── Hand-loss grace period (seconds) ───────────────────────────────────
-    HAND_LOSS_GRACE = 0.300
+    HAND_LOSS_GRACE = 0.800
 
     # ── Confirmation windows per gesture (seconds) ─────────────────────────
     CONFIRMATION_WINDOWS: Dict[str, float] = {
@@ -100,6 +100,13 @@ class GestureEngine:
 
     # ── Minimum confidence to process a detection result ────────────────────
     MIN_CONFIDENCE = 0.60
+
+    # ── Fallback detection tuning (HSV + motion) ───────────────────────────
+    FALLBACK_MIN_AREA_RATIO = 0.005  # 0.5% of frame area
+    FALLBACK_MOG2_HISTORY   = 120
+    FALLBACK_MOG2_VAR       = 18
+    FALLBACK_MOG2_SHADOWS   = False
+    FALLBACK_MOG2_WARMUP    = 20
 
     # MODIFIED ── Directional-lock continuous navigation constants ──────────────
     NAV_ENTRY_BUFFER    = 0.200  # seconds to ignore movement after POINT confirms
@@ -158,9 +165,9 @@ class GestureEngine:
                     base_options=base_options,
                     running_mode=mp_vision.RunningMode.VIDEO,
                     num_hands=1,
-                    min_hand_detection_confidence=0.7,
-                    min_hand_presence_confidence=0.5,
-                    min_tracking_confidence=0.5,
+                    min_hand_detection_confidence=0.3,
+                    min_hand_presence_confidence=0.3,
+                    min_tracking_confidence=0.3,
                 )
                 self.hand_landmarker = mp_vision.HandLandmarker.create_from_options(options)
                 self.use_tasks_api   = True
@@ -221,6 +228,14 @@ class GestureEngine:
         # ── Performance tracking ─────────────────────────────────────────────
         self.fps_counter:    int   = 0
         self.fps_start_time: float = time.time()
+
+        # ── Fallback detection state ─────────────────────────────────────────
+        self._fallback_bg = cv2.createBackgroundSubtractorMOG2(
+            history=self.FALLBACK_MOG2_HISTORY,
+            varThreshold=self.FALLBACK_MOG2_VAR,
+            detectShadows=self.FALLBACK_MOG2_SHADOWS,
+        )
+        self._fallback_frame_count = 0
 
         # MODIFIED ── Directional-lock continuous nav state (POINT mode only) ───
         self._nav_state:         str            = "IDLE"  # IDLE/COLLECTING/NAVIGATING
@@ -1090,13 +1105,44 @@ class GestureEngine:
 
     def _process_frame_fallback(self, frame: np.ndarray) -> np.ndarray:
         """Basic contour-based fallback when MediaPipe model is unavailable."""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
+        # Try skin-color segmentation in HSV + motion mask for more robust hand detection
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Two ranges to capture varied skin tones / lighting
+        lower1 = np.array([0, 30, 60], dtype=np.uint8)
+        upper1 = np.array([20, 150, 255], dtype=np.uint8)
+        lower2 = np.array([160, 30, 60], dtype=np.uint8)
+        upper2 = np.array([179, 150, 255], dtype=np.uint8)
+
+        mask1 = cv2.inRange(hsv, lower1, upper1)
+        mask2 = cv2.inRange(hsv, lower2, upper2)
+        skin_mask = cv2.bitwise_or(mask1, mask2)
+
+        # Motion mask (helps when skin tone blends with background)
+        fg_mask = self._fallback_bg.apply(frame)
+        _, fg_mask = cv2.threshold(fg_mask, 200, 255, cv2.THRESH_BINARY)
+
+        # Combine masks
+        mask = cv2.bitwise_and(skin_mask, fg_mask)
+
+        # Morphological clean-up
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        self._fallback_frame_count += 1
+
         if contours:
             largest = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest) > 1000:
+            area = cv2.contourArea(largest)
+            # Area threshold scaled to image size
+            area_thresh = max(1200, (FRAME_WIDTH * FRAME_HEIGHT) * self.FALLBACK_MIN_AREA_RATIO)
+            if area > area_thresh:
+                # Hand confidently detected
+                self._hand_loss_time = None
+                scene_state.hand_present = True
                 x, y, w, h = cv2.boundingRect(largest)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 center    = (x + w // 2, y + h // 2)
@@ -1109,9 +1155,39 @@ class GestureEngine:
                 dt = self._dt
                 vx, vy, _ = self._compute_velocity(mock_lm, dt)
                 self._apply_mode_control(vx, vy, dt)
-                cv2.putText(frame, "Hand Detected (Fallback Mode)",
+                with self.thread_lock:
+                    self._current_pose = {
+                        "active_gesture": self._active_gesture,
+                        "active_mode":    self._active_mode,
+                        "candidate":      candidate,
+                        "vx": vx, "vy": vy,
+                        "finger_states":  self._finger_states.copy(),
+                        "pinch_active":   self._pinch_active,
+                    }
+                    self.current_gesture    = self._active_gesture
+                    self.gesture_confidence = 0.4
+
+                # Debug overlay: show area and mask preview small window
+                cv2.putText(frame, f"Fallback Hand (area={int(area)})",
                             (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
                             0.7, (0, 255, 0), 2)
+                # Show mask thumbnail in top-right corner
+                try:
+                    thumb = cv2.resize(mask, (160, 120))
+                    th_bgr = cv2.cvtColor(thumb, cv2.COLOR_GRAY2BGR)
+                    frame[0:120, frame.shape[1]-160:frame.shape[1]] = th_bgr
+                except Exception:
+                    pass
+                return frame
+
+        # Warm-up notice during background model stabilization
+        if self._fallback_frame_count < self.FALLBACK_MOG2_WARMUP:
+            cv2.putText(frame, "Fallback warmup...",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7, (0, 200, 200), 2)
+
+        # No valid contour — handle hand loss (grace, reset)
+        self._handle_hand_loss()
         return frame
 
     def _create_mock_landmarks(self, hand_center, hand_size):

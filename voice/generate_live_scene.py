@@ -1,7 +1,13 @@
 import json
 import sys
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
+# Ensure project root is on the import path
+_ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(_ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(_ROOT_DIR))
 
 # Load environment variables (e.g. OLLAMA_MODEL)
 load_dotenv()
@@ -54,12 +60,13 @@ def main():
         sys.exit(1)
         
     # 4. Save to JSON
-    output_path = "scene_grammar.json"
+    output_path = _ROOT_DIR / "core" / "outputs" / "scene_grammar.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"\n[4/4] Output successfully validated! Saving to {output_path}...")
-    
-    with open(output_path, "w", encoding="utf-8") as f:
+
+    with output_path.open("w", encoding="utf-8") as f:
         json.dump(scene_data, f, indent=4)
-        
+
     print(f"\n=== Pipeline Complete! Scene saved to {output_path} ===")
 
 if __name__ == "__main__":
