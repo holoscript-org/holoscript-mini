@@ -124,16 +124,26 @@ def get_status() -> dict[str, Any]:
     snap = read_renderer_snapshot()
     status = snap.get("status")
     if isinstance(status, dict):
-        return status
+        # Normalize snapshot fields — snapshot may be up to _snapshot_interval_sec stale.
+        # ts reflects when this response was assembled, not when the snapshot was written.
+        return {
+            "rotation_y": float(status.get("rotation_y", 0.0)),
+            "scale":      float(status.get("scale", 1.0)),
+            "explode":    float(status.get("explode", 0.0)),
+            "frozen":     bool(status.get("frozen", False)),
+            "gesture":    str(status.get("gesture", "NONE")),
+            "ts":         time.monotonic(),
+        }
 
+    # Fallback: read directly from SceneState (gesture engine in same process).
     rotation_y, scale, explode, frozen = scene_state.get_render_params()
     return {
         "rotation_y": rotation_y,
-        "scale": scale,
-        "explode": explode,
-        "frozen": frozen,
-        "gesture": scene_state.current_gesture,
-        "transcript": scene_state.transcript,
+        "scale":      scale,
+        "explode":    explode,
+        "frozen":     frozen,
+        "gesture":    scene_state.current_gesture,
+        "ts":         time.monotonic(),
     }
 
 
