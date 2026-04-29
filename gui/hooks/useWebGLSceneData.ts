@@ -183,6 +183,11 @@ export function useWebGLSceneData(): WebGLSceneData {
     sceneRef.current = validated.scene
   }, [validated.scene])
 
+  const rotationYRef = useRef(0)
+  useEffect(() => {
+    rotationYRef.current = status.rotation_y
+  }, [status.rotation_y])
+
   useEffect(() => {
     if (validated.fatal) return
 
@@ -193,7 +198,7 @@ export function useWebGLSceneData(): WebGLSceneData {
     const loop = (nowMs: number) => {
       if (!lastTickMs || nowMs - lastTickMs >= 66) {
         const t = (nowMs - startMs) / 1000
-        setFrame(buildWebglPovFrame(sceneRef.current, t))
+        setFrame(buildWebglPovFrame(sceneRef.current, t, rotationYRef.current))
         lastTickMs = nowMs
       }
       raf = requestAnimationFrame(loop)

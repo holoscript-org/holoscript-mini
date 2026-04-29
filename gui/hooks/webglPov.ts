@@ -105,7 +105,7 @@ function writeBrightest(frame: number[][][], a: number, l: number, rgb: [number,
   }
 }
 
-export function buildWebglPovFrame(scene: SceneDef, timeSec: number): Frame {
+export function buildWebglPovFrame(scene: SceneDef, timeSec: number, rotationY = 0): Frame {
   const frame: number[][][] = Array.from({ length: 360 }, () =>
     Array.from({ length: 18 }, () => [0, 0, 0])
   )
@@ -127,7 +127,8 @@ export function buildWebglPovFrame(scene: SceneDef, timeSec: number): Frame {
 
   for (const obj of resolved) {
     const [x, y, z] = obj.position
-    const theta = Math.atan2(z, x)
+    const rotationRad = (rotationY * Math.PI) / 180
+    const theta = Math.atan2(z, x) + rotationRad
     const angleFloat = ((theta + 2 * Math.PI) % (2 * Math.PI)) * (360 / (2 * Math.PI))
     const baseAngle = Math.floor(angleFloat)
 
