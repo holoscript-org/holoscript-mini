@@ -448,6 +448,24 @@ class SceneState:
     # Convenience helpers
     # ------------------------------------------------------------------
 
+    def adjust_rotation_y(self, delta: float) -> float:
+        """Atomically add *delta* degrees to rotation_y. Returns new value."""
+        with self._lock:
+            self._rotation_y = float(self._rotation_y + delta)
+            return self._rotation_y
+
+    def adjust_scale(self, delta: float) -> float:
+        """Atomically add *delta* to scale, clamped to [0.3, 4.0]. Returns new value."""
+        with self._lock:
+            self._scale = max(0.3, min(4.0, self._scale + delta))
+            return self._scale
+
+    def toggle_frozen(self) -> bool:
+        """Atomically toggle frozen. Returns new value."""
+        with self._lock:
+            self._frozen = not self._frozen
+            return self._frozen
+
     def get_render_params(self) -> tuple[float, float, float, bool]:
         """Return all renderer-relevant transform parameters in one atomic read.
 

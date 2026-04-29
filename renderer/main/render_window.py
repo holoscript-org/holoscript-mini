@@ -352,21 +352,16 @@ class Renderer:
     def on_key_press(self, symbol, _modifiers) -> None:
         key = pyglet.window.key
         if symbol == key.SPACE:
-            scene_state.frozen = not scene_state.frozen
-            state = "FROZEN" if scene_state.frozen else "RUNNING"
-            print(f"[Animation] {state}")
+            frozen = scene_state.toggle_frozen()
+            print(f"[Animation] {'FROZEN' if frozen else 'RUNNING'}")
         elif symbol == key.LEFT:
-            scene_state.rotation_y -= 5.0
-            print(f"rotation_y: {scene_state.rotation_y:.1f}")
+            print(f"rotation_y: {scene_state.adjust_rotation_y(-5.0):.1f}")
         elif symbol == key.RIGHT:
-            scene_state.rotation_y += 5.0
-            print(f"rotation_y: {scene_state.rotation_y:.1f}")
+            print(f"rotation_y: {scene_state.adjust_rotation_y(5.0):.1f}")
         elif symbol == key.UP:
-            scene_state.scale = min(4.0, scene_state.scale + 0.1)
-            print(f"scale: {scene_state.scale:.2f}")
+            print(f"scale: {scene_state.adjust_scale(0.1):.2f}")
         elif symbol == key.DOWN:
-            scene_state.scale = max(0.3, scene_state.scale - 0.1)
-            print(f"scale: {scene_state.scale:.2f}")
+            print(f"scale: {scene_state.adjust_scale(-0.1):.2f}")
         elif symbol == key.E:
             scene_state.explode = min(1.0, scene_state.explode + 0.1)
             print(f"explode: {scene_state.explode:.2f}")
@@ -440,15 +435,15 @@ class Renderer:
     def _apply_control(self, action: str) -> None:
         """Apply a single GUI keyboard action to this process's scene_state."""
         if action == "space":
-            scene_state.frozen = not scene_state.frozen
+            scene_state.toggle_frozen()
         elif action == "left":
-            scene_state.rotation_y -= 5.0
+            scene_state.adjust_rotation_y(-5.0)
         elif action == "right":
-            scene_state.rotation_y += 5.0
+            scene_state.adjust_rotation_y(5.0)
         elif action == "up":
-            scene_state.scale = min(4.0, scene_state.scale + 0.1)
+            scene_state.adjust_scale(0.1)
         elif action == "down":
-            scene_state.scale = max(0.3, scene_state.scale - 0.1)
+            scene_state.adjust_scale(-0.1)
         elif action == "e":
             scene_state.explode = min(1.0, scene_state.explode + 0.1)
         elif action == "r":

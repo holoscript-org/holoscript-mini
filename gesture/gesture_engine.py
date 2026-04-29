@@ -628,15 +628,14 @@ class GestureEngine:
         mode = self._active_mode
 
         if mode == "ROTATE":
-            scene_state.rotation_y   += vx * self.ROTATION_SENSITIVITY * dt
+            scene_state.adjust_rotation_y(vx * self.ROTATION_SENSITIVITY * dt)
             scene_state.frozen        = False
             scene_state.current_gesture = "ROTATE"
 
         elif mode == "ZOOM":
             # vy negative = hand moving up = zoom in → negate vy
             scale_delta = -vy * self.ZOOM_SENSITIVITY * dt
-            new_scale   = scene_state.scale + scale_delta
-            scene_state.scale           = max(self.SCALE_MIN, min(self.SCALE_MAX, new_scale))
+            scene_state.adjust_scale(scale_delta)
             scene_state.frozen          = False
             scene_state.current_gesture = "ZOOM"
 
