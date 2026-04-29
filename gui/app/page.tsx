@@ -135,7 +135,12 @@ export default function HologramDashboard() {
       <div className="grid h-[calc(100vh-86px)] min-h-0 grid-cols-1 xl:grid-cols-[1fr_1.08fr] gap-3 md:gap-4">
         {/* Left: WebGL renderer driven by selected JSON scene */}
         <div className="min-h-0">
-          <ThreeScene scene={scene} />
+          <ThreeScene
+            scene={scene}
+            rotationY={status.rotation_y}
+            scale={status.scale}
+            frozen={status.frozen}
+          />
         </div>
 
         {/* Right: Figma-style stacked layout */}

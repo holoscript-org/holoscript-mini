@@ -32,6 +32,10 @@ import {
 type RegistryRef = React.MutableRefObject<Map<string, THREE.Group>>
 const ObjectRegistry = createContext<RegistryRef>({ current: new Map() })
 
+// ─── Frozen context (gesture freeze stops all animation) ──────────────────────
+
+const FrozenContext = createContext<boolean>(false)
+
 // ─── Material helpers ─────────────────────────────────────────────────────────
 
 /** Returns THREE material parameters from a MaterialDef (no texture loading). */
@@ -198,8 +202,9 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
     return () => { registry.current.delete(obj.id) }
   }, [obj.id, registry])
 
-  const anim     = obj.animation ?? { type: "none" }
-  const isOrbit  = anim.type === "orbit"
+  const frozen    = useContext(FrozenContext)
+  const anim      = obj.animation ?? { type: "none" }
+  const isOrbit   = anim.type === "orbit"
   const hasParent = !!obj.parent
 
   // Orbit bookkeeping (local-space for parented, world-space otherwise)
@@ -211,7 +216,7 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
   const orbitY      = useRef(obj.position[1])
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return
+    if (!groupRef.current || frozen) return
 
     if (isOrbit) {
       let cx = staticCenter[0], cy = orbitY.current, cz = staticCenter[2]
@@ -442,9 +447,12 @@ function DebugPanel({
 
 interface ThreeSceneProps {
   scene: Record<string, unknown>
+  rotationY?: number
+  scale?: number
+  frozen?: boolean
 }
 
-export function ThreeScene({ scene }: ThreeSceneProps) {
+export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: ThreeSceneProps) {
   const [mounted, setMounted] = useState(false)
   const [fps, setFps]         = useState(0)
   const fpsRef                = useRef(0)
@@ -535,11 +543,18 @@ export function ThreeScene({ scene }: ThreeSceneProps) {
             <Environment preset="city" />
           </Suspense>
 
-          <Suspense fallback={null}>
-            {rootObjects.map((obj) => (
-              <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
-            ))}
-          </Suspense>
+          <FrozenContext.Provider value={frozen}>
+            <group
+              rotation={[0, THREE.MathUtils.degToRad(rotationY), 0]}
+              scale={scale}
+            >
+              <Suspense fallback={null}>
+                {rootObjects.map((obj) => (
+                  <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
+                ))}
+              </Suspense>
+            </group>
+          </FrozenContext.Provider>
 
           <FPSMeter fpsRef={fpsRef} />
         </Canvas>
