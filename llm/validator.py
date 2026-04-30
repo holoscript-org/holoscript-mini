@@ -8,7 +8,7 @@ existing pipeline code.
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Dict, Any, Set
 from llm import scene_schema
 
 
@@ -21,6 +21,41 @@ def _is_number_list_of_length(v, length: int) -> bool:
         if not isinstance(x, (int, float)):
             return False
     return True
+
+
+def _detect_parent_cycle(objects: list[Dict[str, Any]]) -> bool:
+    """Check if parent references form a cycle. Returns True if a cycle is found."""
+    id_map = {obj.get("id"): obj for obj in objects}
+    visited: Set[str] = set()
+    rec_stack: Set[str] = set()
+
+    def has_cycle(obj_id: str | None) -> bool:
+        if obj_id is None:
+            return False
+        if obj_id in rec_stack:
+            return True
+        if obj_id in visited:
+            return False
+
+        visited.add(obj_id)
+        rec_stack.add(obj_id)
+
+        obj = id_map.get(obj_id)
+        if obj:
+            parent_id = obj.get("parent")
+            if has_cycle(parent_id):
+                return True
+
+        rec_stack.discard(obj_id)
+        return False
+
+    for obj in objects:
+        obj_id = obj.get("id")
+        if obj_id and obj_id not in visited:
+            if has_cycle(obj_id):
+                return True
+
+    return False
 
 
 def validate_member1(scene: Dict[str, Any]) -> bool:
@@ -44,7 +79,13 @@ def validate_member1(scene: Dict[str, Any]) -> bool:
     except Exception as e:
         raise ValueError(f"base schema validation failed: {e}")
 
+    # Check for parent cycles
+    if _detect_parent_cycle(objects):
+        raise ValueError("parent references contain a cycle")
+
     seen_ids = set()
+    seen_parents = set()
+
     for obj in objects:
         obj_id = obj.get("id")
         if not isinstance(obj_id, str) or not obj_id.strip():
@@ -81,7 +122,32 @@ def validate_member1(scene: Dict[str, Any]) -> bool:
         except Exception:
             raise ValueError(f"object {obj_id} has invalid orbit_speed")
 
-    # parent-cycle detection could be added here when `parent` is present.
+        # Validate optional parent reference
+        parent = obj.get("parent")
+        if parent is not None:
+            if not isinstance(parent, str) or not parent.strip():
+                raise ValueError(f"object {obj_id} has invalid parent value")
+            seen_parents.add(parent)
+
+        # Validate optional scale
+        scale = obj.get("scale")
+        if scale is not None:
+            if not _is_number_list_of_length(scale, 3):
+                raise ValueError(f"object {obj_id} has invalid scale")
+            for s in scale:
+                if float(s) <= 0.0:
+                    raise ValueError(f"object {obj_id} scale values must be positive")
+
+        # Validate optional material
+        material = obj.get("material")
+        if material is not None:
+            if not isinstance(material, str):
+                raise ValueError(f"object {obj_id} material must be a string")
+
+    # Check that all parents exist as object ids
+    for parent_id in seen_parents:
+        if parent_id not in seen_ids:
+            raise ValueError(f"parent reference '{parent_id}' does not exist as an object id")
 
     return True
 

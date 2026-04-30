@@ -1,0 +1,838 @@
+[
+  {
+    "command": "show a hydrogen atom",
+    "scene_type": "atom",
+    "num_objects": 3,
+    "scene": {
+      "objects": [
+        {
+          "id": "proton",
+          "type": "sphere",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.6784,
+            0.6235,
+            0.2196
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "electron",
+          "type": "sphere",
+          "position": [
+            2.8,
+            -0.15,
+            0.0
+          ],
+          "color": [
+            0.6549,
+            0.1647,
+            0.03
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.093,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "orbital_ring",
+          "type": "ring",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.03,
+            0.4431,
+            1.0
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        }
+      ]
+    }
+  },
+  {
+    "command": "create a solar system with 8 planets",
+    "scene_type": "solar_system",
+    "num_objects": 11,
+    "scene": {
+      "objects": [
+        {
+          "id": "sun",
+          "type": "sphere",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.9961,
+            0.7333,
+            0.102
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_0",
+          "type": "sphere",
+          "position": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.1255,
+            0.9176,
+            0.9412
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.06,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_1",
+          "type": "sphere",
+          "position": [
+            5.413530715077861,
+            0.0,
+            3.319063903709686
+          ],
+          "color": [
+            0.6314,
+            0.4588,
+            0.2353
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.1,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_2",
+          "type": "sphere",
+          "position": [
+            3.9462862564025225,
+            0.0,
+            7.7535040325344875
+          ],
+          "color": [
+            0.2314,
+            0.4196,
+            0.8588
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.109,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_3",
+          "type": "sphere",
+          "position": [
+            -0.8742858213144117,
+            0.0,
+            11.015358564415804
+          ],
+          "color": [
+            0.7529,
+            0.1216,
+            0.251
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.109,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_4",
+          "type": "sphere",
+          "position": [
+            -7.885914971221634,
+            0.0,
+            10.833851811182507
+          ],
+          "color": [
+            0.451,
+            0.1686,
+            0.0471
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.073,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_5",
+          "type": "sphere",
+          "position": [
+            -14.557762463461302,
+            0.0,
+            6.011160624824225
+          ],
+          "color": [
+            0.3843,
+            0.3098,
+            0.251
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.07,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_6",
+          "type": "sphere",
+          "position": [
+            -17.873383835350456,
+            0.0,
+            -2.855197063992801
+          ],
+          "color": [
+            0.5451,
+            0.9098,
+            0.9412
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.088,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "planet_7",
+          "type": "sphere",
+          "position": [
+            -15.52971075936203,
+            0.0,
+            -13.305284052982678
+          ],
+          "color": [
+            0.9725,
+            0.6275,
+            0.5686
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.086,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "moon_0",
+          "type": "sphere",
+          "position": [
+            4.7,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.0706,
+            0.6549,
+            0.03
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.058,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "moon_1",
+          "type": "sphere",
+          "position": [
+            5.171063539930233,
+            0.14194501315311217,
+            4.028788969475247
+          ],
+          "color": [
+            0.2667,
+            0.3216,
+            0.7098
+          ],
+          "animation": "orbit",
+          "orbit_center": [
+            5.413530715077861,
+            0.0,
+            3.319063903709686
+          ],
+          "orbit_speed": 0.079,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        }
+      ]
+    }
+  },
+  {
+    "command": "display a DNA double helix",
+    "scene_type": "organic",
+    "num_objects": 14,
+    "scene": {
+      "objects": [
+        {
+          "id": "strand_left_0",
+          "type": "cylinder",
+          "position": [
+            1.15,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.8353,
+            0.0706,
+            0.4353
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_right_0",
+          "type": "cylinder",
+          "position": [
+            -1.15,
+            0.0,
+            1.408343819019456e-16
+          ],
+          "color": [
+            0.651,
+            0.0392,
+            0.4157
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "base_pair_0",
+          "type": "cylinder",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.6667,
+            0.7255,
+            0.2667
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_left_1",
+          "type": "cylinder",
+          "position": [
+            -1.15,
+            0.85,
+            1.408343819019456e-16
+          ],
+          "color": [
+            0.03,
+            0.2314,
+            0.2196
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.85,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_right_1",
+          "type": "cylinder",
+          "position": [
+            1.15,
+            0.85,
+            -2.816687638038912e-16
+          ],
+          "color": [
+            0.1451,
+            0.2157,
+            0.6824
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.85,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "base_pair_1",
+          "type": "cylinder",
+          "position": [
+            0.0,
+            0.85,
+            0.0
+          ],
+          "color": [
+            0.7412,
+            0.2745,
+            0.7412
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_left_2",
+          "type": "cylinder",
+          "position": [
+            1.15,
+            1.7,
+            -2.816687638038912e-16
+          ],
+          "color": [
+            0.8353,
+            0.7255,
+            0.1059
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            1.7,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_right_2",
+          "type": "cylinder",
+          "position": [
+            -1.15,
+            1.7,
+            4.225031457058368e-16
+          ],
+          "color": [
+            0.2118,
+            0.7373,
+            0.0471
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            1.7,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "base_pair_2",
+          "type": "cylinder",
+          "position": [
+            0.0,
+            1.7,
+            0.0
+          ],
+          "color": [
+            0.03,
+            0.9412,
+            0.4314
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_left_3",
+          "type": "cylinder",
+          "position": [
+            -1.15,
+            2.55,
+            4.225031457058368e-16
+          ],
+          "color": [
+            0.5255,
+            0.5647,
+            0.3255
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            2.55,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "strand_right_3",
+          "type": "cylinder",
+          "position": [
+            1.15,
+            2.55,
+            -5.633375276077824e-16
+          ],
+          "color": [
+            0.6,
+            0.6039,
+            0.9647
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            2.55,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "base_pair_3",
+          "type": "cylinder",
+          "position": [
+            0.0,
+            2.55,
+            0.0
+          ],
+          "color": [
+            0.7961,
+            0.8588,
+            0.6196
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "support_0",
+          "type": "cube",
+          "position": [
+            0.0,
+            3.4,
+            0.0
+          ],
+          "color": [
+            0.502,
+            0.4745,
+            0.251
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "support_1",
+          "type": "cube",
+          "position": [
+            0.0,
+            4.25,
+            0.0
+          ],
+          "color": [
+            0.1294,
+            0.1294,
+            0.5804
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        }
+      ]
+    }
+  },
+  {
+    "command": "show a water molecule",
+    "scene_type": "molecule",
+    "num_objects": 4,
+    "scene": {
+      "objects": [
+        {
+          "id": "oxygen",
+          "type": "sphere",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.6275,
+            0.9451,
+            0.7843
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "hydrogen_0",
+          "type": "sphere",
+          "position": [
+            0.7040498720396167,
+            0.9092930098054197,
+            0.0
+          ],
+          "color": [
+            0.8471,
+            0.4235,
+            0.4863
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "hydrogen_1",
+          "type": "sphere",
+          "position": [
+            -0.7040498720396167,
+            0.9092930098054197,
+            0.0
+          ],
+          "color": [
+            0.7843,
+            0.5765,
+            0.2118
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        },
+        {
+          "id": "bond",
+          "type": "sphere",
+          "position": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "color": [
+            0.6353,
+            0.3137,
+            0.9333
+          ],
+          "animation": "none",
+          "orbit_center": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orbit_speed": 0.0,
+          "parent": null,
+          "material": null,
+          "scale": null,
+          "metadata": null
+        }
+      ]
+    }
+  }
+]

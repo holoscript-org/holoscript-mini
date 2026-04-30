@@ -239,29 +239,36 @@ def _extract_json_from_text(text: str) -> dict | None:
 
 
 def _call_groq(prompt: str) -> str:
-    """Call Groq API with the given prompt."""
-    if not GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY not found in environment.")
+    """Call Groq API with the given prompt (or fallback to other providers)."""
+    # Try unified provider first; fall back to direct Groq call if needed
+    try:
+        from llm.unified_provider import get_unified_provider
+        provider = get_unified_provider()
+        return provider.call(prompt)
+    except Exception:
+        # Fallback to direct Groq call for backward compatibility
+        if not GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY not found in environment.")
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a scene planner. Output ONLY valid JSON. No markdown. No explanations.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-    }
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": GROQ_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a scene planner. Output ONLY valid JSON. No markdown. No explanations.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
 
-    response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
-    response.raise_for_status()
-    result = response.json()
-    return result["choices"][0]["message"]["content"]
+        response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
+        response.raise_for_status()
+        result = response.json()
+        return result["choices"][0]["message"]["content"]
 
 
 def plan(command: str) -> ScenePlan | None:
