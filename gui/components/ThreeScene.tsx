@@ -14,9 +14,10 @@
  */
 
 import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Canvas, useFrame, useThree } from "@react-three/fiber"
+import { Canvas, useFrame } from "@react-three/fiber"
 import { Environment, OrbitControls, PerspectiveCamera, Text, useGLTF, useTexture } from "@react-three/drei"
 import * as THREE from "three"
+import type { GestureControlRefs } from "@/hooks/useGestureControl"
 import {
   DEMO_SCENE,
   GeometryDef,
@@ -378,14 +379,37 @@ function FPSMeter({ fpsRef }: { fpsRef: React.MutableRefObject<number> }) {
   return null
 }
 
-function SceneInvalidator({ rotationY, scale, frozen }: { rotationY: number; scale: number; frozen: boolean }) {
-  const invalidate = useThree((state) => state.invalidate)
+function GestureSceneRoot({
+  controls,
+  rotationY,
+  scale,
+  frozen,
+  children,
+}: {
+  controls?: GestureControlRefs
+  rotationY: number
+  scale: number
+  frozen: boolean
+  children: React.ReactNode
+}) {
+  const groupRef = useRef<THREE.Group>(null)
 
-  useEffect(() => {
-    invalidate()
-  }, [invalidate, rotationY, scale, frozen])
+  useFrame(() => {
+    if (!groupRef.current) return
 
-  return null
+    const nextRotationY = controls?.rotationYRef.current ?? rotationY
+    const nextScale = controls?.scaleRef.current ?? scale
+    groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextRotationY)
+    groupRef.current.scale.setScalar(nextScale)
+  })
+
+  return (
+    <FrozenContext.Provider value={frozen}>
+      <group ref={groupRef} rotation={[0, THREE.MathUtils.degToRad(rotationY), 0]} scale={[scale, scale, scale]}>
+        {children}
+      </group>
+    </FrozenContext.Provider>
+  )
 }
 
 // ─── Debug panel (outside Canvas) ────────────────────────────────────────────
@@ -457,12 +481,13 @@ function DebugPanel({
 
 interface ThreeSceneProps {
   scene: Record<string, unknown>
+  controls?: GestureControlRefs
   rotationY?: number
   scale?: number
   frozen?: boolean
 }
 
-export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: ThreeSceneProps) {
+export function ThreeScene({ scene, controls, rotationY = 0, scale = 1, frozen = false }: ThreeSceneProps) {
   const [mounted, setMounted] = useState(false)
   const [fps, setFps]         = useState(0)
   const fpsRef                = useRef(0)
@@ -554,21 +579,15 @@ export function ThreeScene({ scene, rotationY = 0, scale = 1, frozen = false }: 
             <Environment preset="city" />
           </Suspense>
 
-          <FrozenContext.Provider value={frozen}>
-            <group
-              rotation={[0, THREE.MathUtils.degToRad(rotationY), 0]}
-              scale={[scale, scale, scale]}
-            >
-              <Suspense fallback={null}>
-                {rootObjects.map((obj) => (
-                  <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
-                ))}
-              </Suspense>
-            </group>
-          </FrozenContext.Provider>
+          <GestureSceneRoot controls={controls} rotationY={rotationY} scale={scale} frozen={frozen}>
+            <Suspense fallback={null}>
+              {rootObjects.map((obj) => (
+                <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
+              ))}
+            </Suspense>
+          </GestureSceneRoot>
 
           <FPSMeter fpsRef={fpsRef} />
-          <SceneInvalidator rotationY={rotationY} scale={scale} frozen={frozen} />
         </Canvas>
       </ObjectRegistry.Provider>
 

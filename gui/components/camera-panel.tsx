@@ -18,6 +18,14 @@ const MP_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm"
 const MP_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+const CAMERA_WIDTH = 320
+const CAMERA_HEIGHT = 240
+const UI_UPDATE_MS = 125
+
+type VideoWithFrameCallback = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: (now: number) => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -43,7 +51,10 @@ export function CameraPanel({
   const lastDetectMsRef = useRef(0)
 
   const animRafRef      = useRef<number | null>(null)
-  const lastFrameTsRef  = useRef(0)
+  const videoFrameCallbackRef = useRef<number | null>(null)
+  const lastUiUpdateRef = useRef(0)
+  const displayedGestureRef = useRef<GestureType>("NONE")
+  const displayedHandsRef = useRef(0)
 
   const [isStreaming,    setIsStreaming]    = useState(false)
   const [currentGesture, setCurrentGesture] = useState<GestureType>("NONE")
@@ -157,21 +168,25 @@ export function CameraPanel({
     if (!isStreaming) return
 
     const canvas = canvasRef.current
-    const video  = videoRef.current
+    const video  = videoRef.current as VideoWithFrameCallback | null
     if (!canvas || !video) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
+    let stopped = false
 
-    const loop = (ts: number) => {
-      animRafRef.current = requestAnimationFrame(loop)
+    const schedule = () => {
+      if (stopped) return
+      if (video.requestVideoFrameCallback) {
+        videoFrameCallbackRef.current = video.requestVideoFrameCallback(processFrame)
+      } else {
+        animRafRef.current = requestAnimationFrame(processFrame)
+      }
+    }
 
-      // ~30 fps cap
-      if (ts - lastFrameTsRef.current < 33) return
-      lastFrameTsRef.current = ts
-
+    const processFrame = () => {
       // Sync canvas size to video
-      const vw = video.videoWidth  || 640
-      const vh = video.videoHeight || 480
+      const vw = video.videoWidth  || CAMERA_WIDTH
+      const vh = video.videoHeight || CAMERA_HEIGHT
       if (canvas.width !== vw || canvas.height !== vh) {
         canvas.width  = vw
         canvas.height = vh
@@ -201,20 +216,34 @@ export function CameraPanel({
         }
       }
 
-      setHandsDetected(hands.length)
       const primaryLandmarks = hands[0]?.landmarks ?? []
       const gesture = classifyGesture(primaryLandmarks)
-      setCurrentGesture(gesture)
+
+      if (
+        nowMs - lastUiUpdateRef.current >= UI_UPDATE_MS &&
+        (displayedGestureRef.current !== gesture || displayedHandsRef.current !== hands.length)
+      ) {
+        lastUiUpdateRef.current = nowMs
+        displayedGestureRef.current = gesture
+        displayedHandsRef.current = hands.length
+        setHandsDetected(hands.length)
+        setCurrentGesture(gesture)
+      }
 
       // Always notify parent — empty landmarks signals hand loss
       onFrameData?.(primaryLandmarks, gesture, nowMs)
 
       drawLandmarks(ctx, hands)
+      schedule()
     }
 
-    animRafRef.current = requestAnimationFrame(loop)
+    schedule()
     return () => {
+      stopped = true
       if (animRafRef.current) cancelAnimationFrame(animRafRef.current)
+      if (videoFrameCallbackRef.current && video.cancelVideoFrameCallback) {
+        video.cancelVideoFrameCallback(videoFrameCallbackRef.current)
+      }
     }
   }, [isStreaming, onFrameData, drawLandmarks])
 
@@ -222,7 +251,12 @@ export function CameraPanel({
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" },
+        video: {
+          width: { ideal: CAMERA_WIDTH },
+          height: { ideal: CAMERA_HEIGHT },
+          frameRate: { ideal: 30, max: 30 },
+          facingMode: "user",
+        },
       })
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -246,6 +280,9 @@ export function CameraPanel({
     setIsStreaming(false)
     setHandsDetected(0)
     setCurrentGesture("NONE")
+    displayedHandsRef.current = 0
+    displayedGestureRef.current = "NONE"
+    lastUiUpdateRef.current = 0
     setMpReady(false)
     setCameraError(null)
   }

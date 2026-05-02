@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useCallback } from "react"
+import { useRef, useState, useCallback, useMemo, type MutableRefObject } from "react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,12 @@ export interface GestureTransformState {
   scale: number
   frozen: boolean
   gesture: GestureType
+}
+
+export interface GestureControlRefs {
+  rotationYRef: MutableRefObject<number>
+  scaleRef: MutableRefObject<number>
+  frozenRef: MutableRefObject<boolean>
 }
 
 export function classifyGesture(landmarks: HandLandmark[]): GestureType {
@@ -70,11 +76,11 @@ const DEAD_ZONE = 0.015
 
 /** Debounce windows before a gesture becomes confirmed (ms) */
 const CONFIRM_MS: Record<GestureType, number> = {
-  PINCH:     80,
-  OPEN_PALM: 100,
-  FIST:      200,
-  POINT:     150,
-  NONE:      200,
+  PINCH:     40,
+  OPEN_PALM: 50,
+  FIST:      180,
+  POINT:     100,
+  NONE:      120,
 }
 
 /** FIST must be held this long (ms) to toggle frozen */
@@ -84,7 +90,7 @@ const FREEZE_HOLD_MS = 400
 const PALM_BASE = [0, 5, 9, 13, 17]
 
 /** Minimum interval between React state updates (ms) — keeps renders at ~30 fps */
-const STATE_UPDATE_MS = 33
+const STATE_UPDATE_MS = 125
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -93,6 +99,10 @@ export function useGestureControl() {
   const rotYRef   = useRef(0)
   const scaleRef  = useRef(1)
   const frozenRef = useRef(false)
+  const controls = useMemo<GestureControlRefs>(
+    () => ({ rotationYRef: rotYRef, scaleRef, frozenRef }),
+    []
+  )
 
   // ── Velocity computation refs ─────────────────────────────────────────────
   const prevCenterRef = useRef<{ x: number; y: number } | null>(null)
@@ -138,8 +148,12 @@ export function useGestureControl() {
           confirmedGestureRef.current = "NONE"
           fistStartRef.current = null
           fistFiredRef.current = false
-          // Still push a state update so UI reflects hand-lost
-          setState((prev) => ({ ...prev, gesture: "NONE" }))
+          setState({
+            rotationY: rotYRef.current,
+            scale: scaleRef.current,
+            frozen: frozenRef.current,
+            gesture: "NONE",
+          })
         }
         return
       }
@@ -234,8 +248,14 @@ export function useGestureControl() {
     vxEmaRef.current  = 0
     vyEmaRef.current  = 0
     prevCenterRef.current = null
+    prevTimeRef.current = 0
+    rawGestureRef.current = "NONE"
+    confirmedGestureRef.current = "NONE"
+    gestureStartRef.current = 0
+    fistStartRef.current = null
+    fistFiredRef.current = false
     setState({ rotationY: 0, scale: 1, frozen: false, gesture: "NONE" })
   }, [])
 
-  return { state, processFrame, reset }
+  return { state, controls, processFrame, reset }
 }

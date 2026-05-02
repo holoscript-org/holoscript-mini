@@ -23,7 +23,7 @@ export default function HologramDashboard() {
   } = useWebGLSceneData()
 
   // ── Browser-side gesture transforms ──────────────────────────────────────────
-  const { state: gestureState, processFrame, reset } = useGestureControl()
+  const { state: gestureState, controls: gestureControls, processFrame, reset } = useGestureControl()
 
   // ── Command panel integration (text commands affect transforms) ───────────────
   const handleCommandSend = useCallback(
@@ -113,8 +113,7 @@ export default function HologramDashboard() {
         <div className="min-h-0">
           <ThreeScene
             scene={scene}
-            rotationY={gestureState.rotationY}
-            scale={gestureState.scale}
+            controls={gestureControls}
             frozen={gestureState.frozen}
           />
         </div>
@@ -125,8 +124,6 @@ export default function HologramDashboard() {
           <div className="grid min-h-0 grid-cols-[0.85fr_1.15fr] gap-3 md:gap-4">
             <div className="min-h-0">
               <POVSimulation
-                zoom={gestureState.scale}
-                rotation={{ x: 0, y: gestureState.rotationY }}
                 onZoomChange={() => {}}
                 frame={frame}
                 compact
