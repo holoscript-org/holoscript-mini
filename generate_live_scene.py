@@ -9,8 +9,7 @@ load_dotenv()
 from voice.recorder import record_audio
 from voice.transcriber import transcribe
 from voice.command_parser import classify_command
-from llm.ollama_client import generate_scene_ollama
-from llm.groq_client import generate_scene
+from llm.voice_pipeline import generate_scene_from_command, persist_scene_outputs
 
 def main():
     print("=== Live Voice-to-Scene Pipeline ===")
@@ -46,21 +45,17 @@ def main():
     print(f"     => Intent: {intent}")
     print(f"     => Command: {repr(cleaned_command)}")
     
-    # generate_scene internally handles OLLAMA, GEMINI, and HYBRID fallback!
-    scene_data = generate_scene(cleaned_command, intent=intent)
+    scene_data = generate_scene_from_command(cleaned_command, intent=intent)
     
     if not scene_data:
         print("\n[!] Failed to pull a valid scene from Ollama.")
         sys.exit(1)
         
     # 4. Save to JSON
-    output_path = "scene_grammar.json"
-    print(f"\n[4/4] Output successfully validated! Saving to {output_path}...")
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(scene_data, f, indent=4)
-        
-    print(f"\n=== Pipeline Complete! Scene saved to {output_path} ===")
+    output_paths = persist_scene_outputs(scene_data)
+    print(f"\n[4/4] Output successfully validated! Saving to {', '.join(str(path) for path in output_paths)}...")
+
+    print(f"\n=== Pipeline Complete! Scene saved to {output_paths[0]} ===")
 
 if __name__ == "__main__":
     main()
