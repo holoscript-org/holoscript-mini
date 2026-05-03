@@ -35,7 +35,17 @@ def generate_scene_from_command(command: str, intent: str = "NEW_SCENE") -> dict
 
     parametric_scene = generate_parametric_scene(plan_obj)
     scene_json = build_scene_json(plan_obj, parametric_scene, validate=True)
-    validate_member1(scene_json)
+    try:
+        validate_member1(scene_json)
+    except Exception as e:
+        # Save debug copy for inspection when validation fails (missing parents, etc.)
+        debug_path = _PROJECT_ROOT / "core" / "outputs" / "failed_scene_debug.json"
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(debug_path, "w", encoding="utf-8") as fh:
+            json.dump(scene_json, fh, indent=2)
+        logger.error("voice_pipeline: validation failed - saved debug scene to %s", debug_path)
+        # Re-raise the original exception so caller sees the error
+        raise
 
     logger.info(
         "voice_pipeline: generated scene_type=%s num_objects=%d intent=%s",

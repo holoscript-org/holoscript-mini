@@ -18,6 +18,7 @@ The builder then uses both plan + coordinates to generate final objects.
 import json
 import time
 import os
+import hashlib
 import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -61,6 +62,33 @@ class ScenePlan(BaseModel):
     hierarchy_needed: bool
     # True if parent-child relationships are needed (e.g., moon orbits earth)
 
+    layout_strategy: str = "generic"
+    # High-level spatial arrangement: orbit, helix, grid, cluster, ring, spine, scatter, branching
+
+    camera_intent: str = "balanced"
+    # Camera framing: close, balanced, wide, cinematic, top_down
+
+    lighting_style: str = "neutral"
+    # Lighting mood: neutral, warm, cool, dramatic, neon, clinical
+
+    style_hints: list[str] = Field(default_factory=list)
+    # Optional style descriptors that help the deterministic builder choose materials
+
+    color_palette: list[str] = Field(default_factory=list)
+    # Optional hex colors chosen by the planner for deterministic material assignment
+
+    component_colors: dict[str, str] = Field(default_factory=dict)
+    # Optional mapping of component roles to specific hex colors (e.g. {"earth": "#4488ff", "mars": "#ff6644"})
+
+    component_sizes: dict[str, float] = Field(default_factory=dict)
+    # Optional mapping of component roles to size scale multipliers (e.g. {"sun": 2.0, "mercury": 0.3, "jupiter": 3.5})
+
+    component_parent: dict[str, str] = Field(default_factory=dict)
+    # Optional mapping of component roles to parent roles for hierarchy (e.g. {"saturn_rings": "saturn", "earth_moon": "earth"})
+
+    focal_object: str | None = None
+    # Optional role to center the composition around
+
     use_mesh: bool
     # True if any component should use a mesh model (organic shapes, complex geometry)
 
@@ -95,6 +123,109 @@ class ScenePlan(BaseModel):
         if v not in valid:
             raise ValueError(f"complexity must be one of {valid}, got {v}")
         return v
+
+    @field_validator("layout_strategy")
+    @classmethod
+    def validate_layout_strategy(cls, v: str) -> str:
+        valid = {"generic", "orbit", "helix", "grid", "cluster", "ring", "spine", "scatter", "branching"}
+        value = v.strip().lower()
+        if value not in valid:
+            return "generic"
+        return value
+
+    @field_validator("camera_intent")
+    @classmethod
+    def validate_camera_intent(cls, v: str) -> str:
+        valid = {"close", "balanced", "wide", "cinematic", "top_down"}
+        value = v.strip().lower()
+        if value not in valid:
+            return "balanced"
+        return value
+
+    @field_validator("lighting_style")
+    @classmethod
+    def validate_lighting_style(cls, v: str) -> str:
+        valid = {"neutral", "warm", "cool", "dramatic", "neon", "clinical"}
+        value = v.strip().lower()
+        if value not in valid:
+            return "neutral"
+        return value
+
+    @field_validator("style_hints")
+    @classmethod
+    def validate_style_hints(cls, v: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for hint in v:
+            text = str(hint).strip().lower()
+            if text and text not in cleaned:
+                cleaned.append(text)
+        return cleaned
+
+    @field_validator("color_palette")
+    @classmethod
+    def validate_color_palette(cls, v: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for color in v:
+            text = str(color).strip().lower()
+            if not text:
+                continue
+            if not (text.startswith("#") and len(text) == 7):
+                continue
+            if text not in cleaned:
+                cleaned.append(text)
+        return cleaned
+
+    @field_validator("component_colors")
+    @classmethod
+    def validate_component_colors(cls, v: dict[str, str]) -> dict[str, str]:
+        """Ensure all component colors are valid hex codes."""
+        cleaned: dict[str, str] = {}
+        for role, color in v.items():
+            role_text = str(role).strip()
+            color_text = str(color).strip().lower()
+            if not role_text or not color_text:
+                continue
+            if not (color_text.startswith("#") and len(color_text) == 7):
+                continue
+            cleaned[role_text] = color_text
+        return cleaned
+
+    @field_validator("component_sizes")
+    @classmethod
+    def validate_component_sizes(cls, v: dict[str, float]) -> dict[str, float]:
+        """Ensure all component sizes are positive floats."""
+        cleaned: dict[str, float] = {}
+        for role, size in v.items():
+            role_text = str(role).strip()
+            if not role_text:
+                continue
+            try:
+                size_float = float(size)
+                if size_float > 0:
+                    cleaned[role_text] = round(size_float, 2)
+            except (ValueError, TypeError):
+                continue
+        return cleaned
+
+    @field_validator("component_parent")
+    @classmethod
+    def validate_component_parent(cls, v: dict[str, str]) -> dict[str, str]:
+        """Ensure all parent relationships map strings to strings."""
+        cleaned: dict[str, str] = {}
+        for child, parent in v.items():
+            child_text = str(child).strip()
+            parent_text = str(parent).strip()
+            if child_text and parent_text and child_text != parent_text:
+                cleaned[child_text] = parent_text
+        return cleaned
+
+    @field_validator("focal_object")
+    @classmethod
+    def validate_focal_object(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        text = str(v).strip()
+        return text or None
 
     @field_validator("num_objects")
     @classmethod
@@ -141,25 +272,30 @@ VALID_SCENE_TYPES = {
 VALID_ANIMATION_TYPES = {"none", "orbit", "spin"}
 
 
+def _stable_int(*parts: str) -> int:
+    data = "|".join(parts).encode("utf-8")
+    return int(hashlib.sha1(data).hexdigest()[:8], 16)
+
+
+def _hex_palette(seed_text: str, count: int = 4) -> list[str]:
+    seed = _stable_int(seed_text)
+    palette: list[str] = []
+    for index in range(count):
+        value = (seed >> (index * 5)) & 0xFFFFFF
+        red = 64 + ((value >> 16) & 0xFF) % 160
+        green = 64 + ((value >> 8) & 0xFF) % 160
+        blue = 64 + (value & 0xFF) % 160
+        palette.append(f"#{red:02x}{green:02x}{blue:02x}")
+    return palette
+
+
 def _repair_plan_data(plan_data: dict, command: str) -> dict:
     """Normalize loose model output before validation."""
     repaired = dict(plan_data)
 
     scene_type = str(repaired.get("scene_type", "abstract")).strip().lower()
     if scene_type not in VALID_SCENE_TYPES:
-        lowered = command.lower()
-        if any(token in lowered for token in ("atom", "electron", "proton", "nucleus")):
-            scene_type = "atom"
-        elif any(token in lowered for token in ("molecule", "water", "dna", "helix", "chemical")):
-            scene_type = "molecule" if "water" in lowered or "molecule" in lowered else "organic"
-        elif any(token in lowered for token in ("planet", "solar", "orbit", "star", "moon")):
-            scene_type = "solar_system"
-        elif any(token in lowered for token in ("heart", "brain", "organ", "organic")):
-            scene_type = "organic"
-        elif any(token in lowered for token in ("grid", "lattice", "crystal", "crystalline")):
-            scene_type = "crystalline"
-        else:
-            scene_type = "abstract"
+        scene_type = "abstract"
     repaired["scene_type"] = scene_type
 
     components = repaired.get("components", [])
@@ -207,14 +343,38 @@ def _repair_plan_data(plan_data: dict, command: str) -> dict:
     if "use_mesh" in repaired:
         repaired["use_mesh"] = bool(repaired["use_mesh"])
     else:
-        repaired["use_mesh"] = scene_type == "organic" and any(
-            token in command.lower() for token in ("heart", "brain", "organ")
-        )
+        repaired["use_mesh"] = scene_type == "organic" and len(repaired.get("components", [])) == 1
+
+    lowered = command.lower()
+    if "layout_strategy" not in repaired:
+        layout_options = ["generic", "orbit", "helix", "grid", "cluster", "ring", "spine", "scatter", "branching"]
+        repaired["layout_strategy"] = layout_options[_stable_int(command, scene_type) % len(layout_options)]
+
+    if "camera_intent" not in repaired:
+        camera_options = ["close", "balanced", "wide", "cinematic", "top_down"]
+        repaired["camera_intent"] = camera_options[_stable_int(command, scene_type, "camera") % len(camera_options)]
+
+    if "lighting_style" not in repaired:
+        lighting_options = ["neutral", "warm", "cool", "dramatic", "neon", "clinical"]
+        repaired["lighting_style"] = lighting_options[_stable_int(command, scene_type, "lighting") % len(lighting_options)]
+
+    if "style_hints" not in repaired:
+        tokens = [token.strip(".,:;!?()[]{}\"'") for token in lowered.split()]
+        hints = [token for token in tokens if len(token) > 4 and token.isalpha()]
+        repaired["style_hints"] = list(dict.fromkeys(hints[:4]))
+
+    if "color_palette" not in repaired:
+        repaired["color_palette"] = _hex_palette(command + scene_type, 4)
+
+    if "focal_object" not in repaired:
+        components = repaired.get("components", [])
+        repaired["focal_object"] = components[0] if components else None
 
     try:
         repaired["num_objects"] = int(repaired.get("num_objects", 1))
     except (TypeError, ValueError):
         repaired["num_objects"] = 1
+    repaired["num_objects"] = max(1, min(20, repaired["num_objects"]))
 
     return repaired
 

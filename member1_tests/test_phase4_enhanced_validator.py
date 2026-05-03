@@ -52,22 +52,38 @@ def test_parent_cycle_detection() -> int:
         "objects": [
             {
                 "id": "sun",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.5},
                 "position": [0.0, 0.0, 0.0],
-                "color": [1.0, 1.0, 0.0],
-                "animation": "none",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.0,
+                "scale": [1.0, 1.0, 1.0],
+                "material": {
+                    "type": "standard",
+                    "color": "#FFFF00",
+                    "roughness": 0.5,
+                    "metalness": 0.0,
+                },
+                "animation": {"type": "none"},
                 "parent": None,
             },
             {
                 "id": "planet",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.3},
                 "position": [5.0, 0.0, 0.0],
-                "color": [0.2, 0.5, 1.0],
-                "animation": "orbit",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.1,
+                "scale": [1.0, 1.0, 1.0],
+                "material": {
+                    "type": "standard",
+                    "color": "#3366FF",
+                    "roughness": 0.3,
+                    "metalness": 0.5,
+                },
+                "animation": {
+                    "type": "orbit",
+                    "center": [0.0, 0.0, 0.0],
+                    "speed": 0.1,
+                    "axis": [0.0, 1.0, 0.0],
+                    "phase": 0.0,
+                },
                 "parent": "sun",
             },
         ]
@@ -85,12 +101,17 @@ def test_parent_cycle_detection() -> int:
         "objects": [
             {
                 "id": "obj",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.5},
                 "position": [0.0, 0.0, 0.0],
-                "color": [1.0, 0.0, 0.0],
-                "animation": "none",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.0,
+                "scale": [1.0, 1.0, 1.0],
+                "material": {
+                    "type": "standard",
+                    "color": "#FF0000",
+                    "roughness": 0.5,
+                    "metalness": 0.0,
+                },
+                "animation": {"type": "none"},
                 "parent": "obj",  # self-cycle
             }
         ]
@@ -112,12 +133,17 @@ def test_parent_cycle_detection() -> int:
         "objects": [
             {
                 "id": "moon",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.2},
                 "position": [5.5, 0.0, 0.0],
-                "color": [0.5, 0.5, 0.5],
-                "animation": "none",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.0,
+                "scale": [1.0, 1.0, 1.0],
+                "material": {
+                    "type": "standard",
+                    "color": "#808080",
+                    "roughness": 0.6,
+                    "metalness": 0.3,
+                },
+                "animation": {"type": "none"},
                 "parent": "nonexistent_planet",  # bad reference
             }
         ]
@@ -146,14 +172,17 @@ def test_extended_fields() -> int:
         "objects": [
             {
                 "id": "metallic_sphere",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.5},
                 "position": [0.0, 0.0, 0.0],
-                "color": [0.8, 0.8, 0.8],
-                "animation": "none",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.0,
-                "material": "metallic",
                 "scale": [1.5, 1.5, 1.5],
+                "material": {
+                    "type": "standard",
+                    "color": "#CCCCCC",
+                    "roughness": 0.3,
+                    "metalness": 0.8,
+                },
+                "animation": {"type": "none"},
             }
         ]
     }
@@ -170,13 +199,17 @@ def test_extended_fields() -> int:
         "objects": [
             {
                 "id": "bad_scale",
-                "type": "sphere",
+                "type": "primitive",
+                "geometry": {"type": "sphere", "radius": 0.5},
                 "position": [0.0, 0.0, 0.0],
-                "color": [1.0, 0.0, 0.0],
-                "animation": "none",
-                "orbit_center": [0.0, 0.0, 0.0],
-                "orbit_speed": 0.0,
                 "scale": [0.0, 1.0, 1.0],  # zero scale is invalid
+                "material": {
+                    "type": "standard",
+                    "color": "#FF0000",
+                    "roughness": 0.5,
+                    "metalness": 0.0,
+                },
+                "animation": {"type": "none"},
             }
         ]
     }

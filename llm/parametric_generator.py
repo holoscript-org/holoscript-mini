@@ -107,6 +107,120 @@ def _find_roles(placements: list[PlacementSpec], prefix: str) -> list[PlacementS
     return [placement for placement in placements if placement.role == prefix or placement.role.startswith(f"{prefix}_")]
 
 
+def _stable_int(*parts: str) -> int:
+    text = "|".join(parts)
+    total = 0
+    for char in text:
+        total = (total * 131 + ord(char)) & 0xFFFFFFFF
+    return total
+
+
+def _role_order(plan: ScenePlan) -> list[tuple[str, int]]:
+    roles = _ordered_roles(plan)
+    focal = (plan.focal_object or "").strip()
+    if focal:
+        roles = sorted(roles, key=lambda item: (0 if item[0] == focal or item[0].startswith(focal + "_") else 1, item[1], item[0]))
+    return roles
+
+
+def _build_generic_scene(plan: ScenePlan) -> ParametricScene:
+    roles = _role_order(plan)
+    if not roles:
+        roles = [("core", 0)]
+
+    layout = plan.layout_strategy
+    count = max(1, plan.num_objects)
+    seed = _stable_int(plan.scene_type, plan.description, plan.layout_strategy, plan.camera_intent, plan.lighting_style)
+    positions: list[PlacementSpec] = []
+
+    def add(role: str, idx: int, position: tuple[float, float, float], **metadata: Any) -> None:
+        parent = None
+        orbit_center = None
+        if layout == "orbit" and role != roles[0][0]:
+            parent = roles[0][0]
+            orbit_center = _vec(0.0, 0.0, 0.0)
+        elif layout == "helix" and idx > 0:
+            orbit_center = _vec(0.0, float(position[1]), 0.0)
+        elif layout == "ring":
+            orbit_center = _vec(0.0, 0.0, 0.0)
+        positions.append(
+            PlacementSpec(
+                role=role,
+                index=idx,
+                position=position,
+                parent=parent,
+                orbit_center=orbit_center,
+                metadata=metadata,
+            )
+        )
+
+    if layout == "orbit":
+        add(roles[0][0], roles[0][1], _vec(0.0, 0.0, 0.0), kind="core")
+        orbit_roles = roles[1:] or [(f"orbit_{i}", i) for i in range(count - 1)]
+        orbit_total = max(1, len(orbit_roles))
+        for i, (role, idx) in enumerate(orbit_roles, start=1):
+            radius = 2.6 + 0.55 * i + ((seed >> (i % 8)) & 0x07) * 0.05
+            angle = (i / orbit_total) * (2.0 * pi) + ((seed >> (i % 10)) & 0x0F) * 0.04
+            y = ((i % 3) - 1) * 0.2
+            add(role, idx, _circle_point(radius, angle, y=y), kind="orbiting", orbit_radius=radius)
+    elif layout == "helix":
+        turns = 2.0 + ((seed & 0x03) * 0.35)
+        pitch = 0.75 + (((seed >> 3) & 0x03) * 0.08)
+        radius = 1.05 + (((seed >> 6) & 0x03) * 0.08)
+        for i, (role, idx) in enumerate(roles[:count]):
+            t = i * (2.0 * pi / max(1, count)) * turns
+            y = i * pitch
+            side = 1 if i % 2 == 0 else -1
+            x = radius * cos(t) * side
+            z = radius * sin(t) * side
+            metadata = {"kind": "strand" if i % 3 != 2 else "connector", "helix_index": i}
+            add(role, idx, _vec(x, y, z), **metadata)
+    elif layout == "ring":
+        radius = 3.0 + (((seed >> 5) & 0x03) * 0.35)
+        for i, (role, idx) in enumerate(roles[:count]):
+            angle = i * (2.0 * pi / max(1, count))
+            add(role, idx, _circle_point(radius, angle, y=0.0), kind="ring")
+    elif layout == "spine":
+        spacing = 0.95 + (((seed >> 4) & 0x03) * 0.1)
+        for i, (role, idx) in enumerate(roles[:count]):
+            add(role, idx, _vec(0.45 * sin(i * 0.8), i * spacing, 0.45 * cos(i * 0.8)), kind="spine_segment")
+    elif layout == "grid":
+        spacing = 2.4 if plan.complexity == "low" else 3.0
+        for i, (role, idx) in enumerate(roles[:count]):
+            add(role, idx, _grid_position(i, count, spacing=spacing), kind="grid_cell", cell_index=i)
+    elif layout == "cluster":
+        for i, (role, idx) in enumerate(roles[:count]):
+            radius = 0.6 + (i / max(1, count - 1)) * 2.4
+            angle = GOLDEN_ANGLE * i + ((seed >> (i % 6)) & 0x07) * 0.08
+            y = ((i % 5) - 2) * 0.45
+            add(role, idx, _circle_point(radius, angle, y=y), kind="cluster_member")
+    elif layout == "branching":
+        for i, (role, idx) in enumerate(roles[:count]):
+            depth = i.bit_length() - 1 if i > 0 else 0
+            branch = i - (2 ** depth - 1)
+            x = (branch - (2 ** depth - 1) / 2.0) * (1.4 / max(1, depth + 1))
+            y = depth * 1.1
+            z = depth * 0.5
+            add(role, idx, _vec(x, y, z), kind="branch_node", depth=depth, branch=branch)
+    else:
+        for i, (role, idx) in enumerate(roles[:count]):
+            angle = i * GOLDEN_ANGLE + ((seed >> (i % 12)) & 0x0F) * 0.03
+            radius = 1.8 + (i * 0.22)
+            y = ((i % 4) - 1.5) * 0.55
+            add(role, idx, _circle_point(radius, angle, y=y), kind="scatter")
+
+    while len(positions) < count:
+        i = len(positions)
+        role = f"element_{i}"
+        idx = i
+        angle = i * GOLDEN_ANGLE + ((seed >> (i % 12)) & 0x0F) * 0.03
+        radius = 1.8 + (i * 0.22)
+        y = ((i % 4) - 1.5) * 0.55
+        add(role, idx, _circle_point(radius, angle, y=y), kind="scatter")
+
+    return ParametricScene(scene_type=plan.scene_type, placements=positions[:count], notes=[f"layout:{layout}"])
+
+
 # ---------------------------------------------------------------------------
 # Scene-specific builders
 # ---------------------------------------------------------------------------
@@ -463,19 +577,7 @@ def _build_fallback(plan: ScenePlan) -> ParametricScene:
 def generate_parametric_scene(plan: ScenePlan) -> ParametricScene:
     """Convert a ScenePlan into deterministic placements."""
 
-    scene_type = plan.scene_type.lower()
-    if scene_type == "atom":
-        result = _build_atom(plan)
-    elif scene_type == "molecule":
-        result = _build_molecule(plan)
-    elif scene_type in {"solar_system", "astronomical"}:
-        result = _build_solar_system(plan)
-    elif scene_type == "organic":
-        result = _build_organic(plan)
-    elif scene_type in {"mechanical", "system", "structure", "geometric", "crystalline", "abstract", "diagram", "vehicle", "landscape"}:
-        result = _build_grid(plan)
-    else:
-        result = _build_fallback(plan)
+    result = _build_generic_scene(plan)
 
     if len(result.placements) != plan.num_objects:
         logger.info(

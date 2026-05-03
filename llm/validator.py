@@ -23,6 +23,10 @@ def _is_number_list_of_length(v, length: int) -> bool:
     return True
 
 
+def _is_hex_color(v: Any) -> bool:
+    return isinstance(v, str) and v.startswith("#") and len(v) == 7
+
+
 def _detect_parent_cycle(objects: list[Dict[str, Any]]) -> bool:
     """Check if parent references form a cycle. Returns True if a cycle is found."""
     id_map = {obj.get("id"): obj for obj in objects}
@@ -99,28 +103,54 @@ def validate_member1(scene: Dict[str, Any]) -> bool:
         if not _is_number_list_of_length(pos, 3):
             raise ValueError(f"object {obj_id} has invalid position")
 
-        color = obj.get("color")
-        if not _is_number_list_of_length(color, 3):
-            raise ValueError(f"object {obj_id} has invalid color format")
-        for c in color:
-            if not (0.0 <= float(c) <= 1.0):
-                raise ValueError(f"object {obj_id} color components must be between 0.0 and 1.0")
+        material = obj.get("material")
+        legacy_color = obj.get("color")
+        if material is not None:
+            if isinstance(material, dict):
+                color = material.get("color")
+                if not _is_hex_color(color):
+                    raise ValueError(f"object {obj_id} has invalid color format")
+                roughness = material.get("roughness")
+                metalness = material.get("metalness")
+                opacity = material.get("opacity", 1.0)
+                for field_name, value in (("roughness", roughness), ("metalness", metalness), ("opacity", opacity)):
+                    if value is not None and not (0.0 <= float(value) <= 1.0):
+                        raise ValueError(f"object {obj_id} {field_name} must be between 0.0 and 1.0")
+            elif not isinstance(material, str):
+                raise ValueError(f"object {obj_id} material must be a dict or string")
+        elif legacy_color is not None:
+            if not _is_number_list_of_length(legacy_color, 3):
+                raise ValueError(f"object {obj_id} has invalid color format")
+            for c in legacy_color:
+                if not (0.0 <= float(c) <= 1.0):
+                    raise ValueError(f"object {obj_id} color components must be between 0.0 and 1.0")
+        else:
+            raise ValueError(f"object {obj_id} missing material/color")
 
         anim = obj.get("animation")
-        if anim not in {"none", "orbit"}:
-            raise ValueError(f"object {obj_id} has invalid animation value: {anim}")
+        if isinstance(anim, dict):
+            anim_type = anim.get("type")
+            if anim_type not in {"none", "orbit", "spin"}:
+                raise ValueError(f"object {obj_id} has invalid animation value: {anim_type}")
+            if anim_type == "orbit" and not _is_number_list_of_length(anim.get("center"), 3):
+                raise ValueError(f"object {obj_id} has animation 'orbit' but invalid center")
+            if anim_type == "spin" and not _is_number_list_of_length(anim.get("axis"), 3):
+                raise ValueError(f"object {obj_id} has animation 'spin' but invalid axis")
+        else:
+            if anim not in {"none", "orbit"}:
+                raise ValueError(f"object {obj_id} has invalid animation value: {anim}")
 
-        orbit_center = obj.get("orbit_center")
-        if anim == "orbit":
-            if not _is_number_list_of_length(orbit_center, 3):
-                raise ValueError(f"object {obj_id} has animation 'orbit' but invalid orbit_center")
+            orbit_center = obj.get("orbit_center")
+            if anim == "orbit":
+                if not _is_number_list_of_length(orbit_center, 3):
+                    raise ValueError(f"object {obj_id} has animation 'orbit' but invalid orbit_center")
 
-        orbit_speed = obj.get("orbit_speed")
-        try:
-            if float(orbit_speed) < 0.0:
-                raise ValueError(f"object {obj_id} has negative orbit_speed")
-        except Exception:
-            raise ValueError(f"object {obj_id} has invalid orbit_speed")
+            orbit_speed = obj.get("orbit_speed")
+            try:
+                if float(orbit_speed) < 0.0:
+                    raise ValueError(f"object {obj_id} has negative orbit_speed")
+            except Exception:
+                raise ValueError(f"object {obj_id} has invalid orbit_speed")
 
         # Validate optional parent reference
         parent = obj.get("parent")
@@ -137,12 +167,6 @@ def validate_member1(scene: Dict[str, Any]) -> bool:
             for s in scale:
                 if float(s) <= 0.0:
                     raise ValueError(f"object {obj_id} scale values must be positive")
-
-        # Validate optional material
-        material = obj.get("material")
-        if material is not None:
-            if not isinstance(material, str):
-                raise ValueError(f"object {obj_id} material must be a string")
 
     # Check that all parents exist as object ids
     for parent_id in seen_parents:

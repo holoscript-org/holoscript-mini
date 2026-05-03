@@ -147,74 +147,19 @@ def build_planner_prompt(command: str) -> str:
     The planner extracts scene intent WITHOUT generating final JSON.
     Output is a structured plan: scene_type, num_objects, components, animations, etc.
     """
+    return f"""You are a 3D scene planner with deep domain knowledge. Your job is to think like an expert in the thing being visualized, NOT like a programmer.
 
-    planner_examples = [
-        {
-            "command": "show a hydrogen atom",
-            "plan": {
-                "scene_type": "atom",
-                "description": "A hydrogen atom with a central proton and an orbiting electron",
-                "num_objects": 3,
-                "components": ["proton", "electron", "orbital_ring"],
-                "repeat_counts": {},
-                "animation_types": ["none", "orbit"],
-                "hierarchy_needed": False,
-                "use_mesh": False,
-                "complexity": "low"
-            }
-        },
-        {
-            "command": "create a solar system with 8 planets",
-            "plan": {
-                "scene_type": "solar_system",
-                "description": "A solar system with the sun and 8 orbiting planets, some with moons",
-                "num_objects": 11,
-                "components": ["sun", "planet", "moon"],
-                "repeat_counts": {"planet": 8, "moon": 2},
-                "animation_types": ["none", "orbit"],
-                "hierarchy_needed": True,
-                "use_mesh": False,
-                "complexity": "medium"
-            }
-        },
-        {
-            "command": "show a DNA double helix",
-            "plan": {
-                "scene_type": "organic",
-                "description": "A DNA double helix with intertwined strands and base pair connectors",
-                "num_objects": 15,
-                "components": ["strand_left", "strand_right", "base_pair"],
-                "repeat_counts": {"base_pair": 12},
-                "animation_types": ["none"],
-                "hierarchy_needed": False,
-                "use_mesh": False,
-                "complexity": "medium"
-            }
-        },
-        {
-            "command": "display a human heart",
-            "plan": {
-                "scene_type": "organic",
-                "description": "A realistic human heart with chambers and detailed internal structure",
-                "num_objects": 1,
-                "components": ["heart_mesh"],
-                "repeat_counts": {},
-                "animation_types": ["none"],
-                "hierarchy_needed": False,
-                "use_mesh": True,
-                "complexity": "high"
-            }
-        }
-    ]
+Extract the user's intent and create an INTELLIGENT, SEMANTICALLY RICH plan.
+Do NOT hardcode decisions. Instead, use real-world knowledge to guide what should exist in the scene.
 
-    examples_str = "\n\n".join(
-        f"Command: \"{ex['command']}\"\nPlan: {json.dumps(ex['plan'], indent=2)}"
-        for ex in planner_examples
-    )
+Examples of intelligent semantic planning:
+- "show me a solar system" → You KNOW Saturn has rings. You KNOW planets can have moons. Add saturn_rings, earth_moon, mars_moon. Use correct colors and sizes.
+- "DNA molecule" → You KNOW it's a double helix, NOT just 2 random spheres. Use helix layout with base_pairs spiraling around a central axis.
+- "mechanical clock" → You KNOW gears mesh together, springs store energy, hands rotate. Add gear_train, spring, hour_hand, minute_hand, second_hand.
+- "water molecule" → You KNOW the bent geometry with ~109° angle between bonds. Add oxygen nucleus + 2 hydrogen atoms positioned accordingly.
+- "crystal lattice" → You KNOW atoms repeat in a regular 3D pattern with bonds between neighbors. Use grid layout.
 
-    return f"""You are a 3D scene planner. Extract the abstract intent from a user command.
-
-Do NOT generate final scene JSON. Instead, produce a plan that describes what the scene should contain:
+Your intelligence should come from UNDERSTANDING THE REAL STRUCTURE, not from hardcoded rules.
 
 Output format (raw JSON, no markdown, no explanation):
 {{
@@ -222,34 +167,72 @@ Output format (raw JSON, no markdown, no explanation):
   "description": "plain language summary",
   "num_objects": <1-20>,
   "components": ["list", "of", "major", "building", "blocks"],
-    "repeat_counts": {{"component_name": <count>}},
+  "repeat_counts": {{"component_name": <count>}},
   "animation_types": ["none", "orbit", "spin"],
   "hierarchy_needed": true/false,
+  "layout_strategy": "generic|orbit|helix|grid|cluster|ring|spine|scatter|branching",
+  "camera_intent": "close|balanced|wide|cinematic|top_down",
+  "lighting_style": "neutral|warm|cool|dramatic|neon|clinical",
+  "style_hints": ["optional", "style", "keywords"],
+  "color_palette": ["#rrggbb", "#rrggbb"],
+  "component_colors": {{"component_name": "#rrggbb", "another_component": "#rrggbb"}},
+  "component_sizes": {{"sun": 2.0, "mercury": 0.3, "earth": 1.0, "jupiter": 3.5}},
+  "component_parent": {{"saturn_rings": "saturn", "earth_moon": "earth"}},
+  "focal_object": "optional_role_name",
   "use_mesh": true/false,
   "complexity": "low|medium|high"
 }}
 
-Rules:
-- scene_type: What kind of scene? (atom, molecule, solar system, etc.)
-- description: What does the user want? Plain language.
-- num_objects: How many objects total? (estimate is fine, 1-20)
-- components: What are the major parts? Use unique role names only. Do not repeat names in the list.
-- repeat_counts: Use this for repeated elements. Example: {{"planet": 8, "moon": 2}}
-- animation_types: Which animation types? (none, orbit, spin)
-- hierarchy_needed: Do objects have parent-child relationships? (e.g., moon orbits earth)
-- use_mesh: Should any part use a 3D mesh model instead of primitives? (organic shapes need meshes)
-- complexity: low (<5 objects), medium (6-15), high (16-20)
+SEMANTIC INTELLIGENCE RULES:
+- scene_type: What kind of scene? (atom, molecule, solar_system, mechanical, organic, crystalline, astronomical, etc.)
+- description: What does the user want? Describe their actual intent.
+- num_objects: Total object count, 1-20. Think about what the real thing requires.
+- components: Major building blocks with SEMANTICALLY RICH NAMES. Do NOT repeat names.
+  * Think: what would a real version have? Add those as components.
+  * Solar System: ["sun", "mercury", "venus", "earth", "earth_moon", "mars", "mars_moon", "jupiter", "saturn", "saturn_rings", "uranus", "neptune"]
+  * DNA: ["backbone_strand_1", "backbone_strand_2", "base_pair_0", "base_pair_1", "base_pair_2", ...] with helix layout
+  * Mechanical Clock: ["frame", "gear_train", "mainspring", "escapement", "hour_hand", "minute_hand", "second_hand", "pendulum"]
+  * Water: ["oxygen_nucleus", "hydrogen_1", "hydrogen_2"] with bent geometry
+  * Crystal: Use grid layout with ["atom"] repeated, connected by ["bond"]
+- repeat_counts: Only for identical repetitions (e.g., {{"asteroid": 20}} for 20 identical asteroids in an asteroid belt)
+- animation_types: Which types? "none", "orbit", "spin", etc.
+- hierarchy_needed: true if objects have parent-child relationships (moons orbit planets, springs attach to gears, base_pairs belong to strands)
+- layout_strategy: Main spatial grammar based on real structure:
+  * "orbit" for solar systems, planetary systems
+  * "helix" for DNA, spiral structures
+  * "grid" for crystal lattices, atom grids
+  * "cluster" for molecular clusters
+  * "ring" for planetary rings, annular structures
+  * "generic" for unstructured collections
+- camera_intent: How to frame the scene (close, balanced, wide, cinematic, top_down)
+- lighting_style: The mood (neutral, warm, cool, dramatic, neon, clinical)
+- style_hints: Short descriptors ("realistic", "scientific", "artistic", "holographic", etc.)
+- color_palette: 2-4 base hex colors
+- component_colors: Map EACH component to its REALISTIC color. YOU should know realistic colors:
+  * Solar system: {{"sun": "#ffd700", "mercury": "#808080", "venus": "#ffcc00", "earth": "#4488ff", "mars": "#ff6644", "jupiter": "#cc8844", "saturn": "#ffdd88", "saturn_rings": "#d4a574", "uranus": "#88ccff", "neptune": "#0097e6"}}
+  * DNA: {{"backbone_strand_1": "#ff6699", "backbone_strand_2": "#6699ff", "base_pair": "#ffff99"}}
+  * Water: {{"oxygen_nucleus": "#ff0000", "hydrogen_1": "#ffffff", "hydrogen_2": "#ffffff"}}
+  * Clock: {{"frame": "#8b4513", "gear_train": "#c0c0c0", "mainspring": "#696969", "hour_hand": "#000000", "minute_hand": "#000000", "pendulum": "#c0c0c0"}}
+- component_sizes: Map components to realistic relative sizes (1.0 = baseline):
+  * Solar system: {{"sun": 2.0, "mercury": 0.38, "venus": 0.95, "earth": 1.0, "mars": 0.53, "jupiter": 11.2, "saturn": 9.4, "saturn_rings": 9.4, "earth_moon": 0.27, "mars_moon": 0.015}}
+  * DNA: {{"backbone_strand": 0.5, "base_pair": 0.3}}
+  * Water: {{"oxygen_nucleus": 1.0, "hydrogen_1": 0.5, "hydrogen_2": 0.5}}
+- component_parent: Define parent-child hierarchy. Format: {{"child": "parent"}}
+  * Solar system: {{"earth_moon": "earth", "mars_moon": "mars", "saturn_rings": "saturn"}}
+  * DNA: All base_pairs and connectors reference their strand: {{"base_pair_0": "strand_1", "base_pair_1": "strand_1"}}
+  * Clock: {{"hour_hand": "frame", "minute_hand": "frame", "second_hand": "frame", "pendulum": "frame"}}
+  * Water: Hydrogens reference oxygen: {{"hydrogen_1": "oxygen_nucleus", "hydrogen_2": "oxygen_nucleus"}}
+- focal_object: The dominant/central component ("sun", "nucleus", "frame", "earth")
+- use_mesh: true ONLY if the scene needs complex 3D geometry that can't be made from primitives. Usually false.
+- complexity: low (<5), medium (6-15), high (16-20)
 
-Stability rules:
-- Keep component names deterministic and role-based.
-- Prefer {{"left", "right", "center", "ring"}} style names for symmetrical structures.
-- When a structure repeats, encode the repetition in repeat_counts instead of duplicating component names.
-- The planner should be general-purpose: it must work for atoms, molecules, solar systems, structures, vehicles, characters, landscapes, diagrams, and abstract scenes.
-
-Examples:
-
-{examples_str}
+CRITICAL: Do NOT hardcode. Use SEMANTIC INTELLIGENCE based on the real structure of the thing.
+When user says "solar system", think like an astronomer, not a programmer.
+When user says "DNA", think like a biochemist, not a programmer.
+When user says "clock", think like a horologist, not a programmer.
 
 User command: {command}
 
 Output only the JSON plan. Nothing else."""
+
+

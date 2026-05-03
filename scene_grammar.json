@@ -1,378 +1,198 @@
 {
+  "name": "Water molecule (H2O) with realistic atomic arrangement",
+  "camera": {
+    "position": [
+      5.0,
+      5.0,
+      10.25
+    ],
+    "target": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "fov": 60.0
+  },
+  "lights": [
+    {
+      "type": "ambient",
+      "color": "#ffffff",
+      "intensity": 0.29,
+      "position": null,
+      "castShadow": false
+    },
+    {
+      "type": "directional",
+      "color": "#ffffff",
+      "intensity": 0.8,
+      "position": [
+        8.0,
+        10.0,
+        8.0
+      ],
+      "castShadow": true
+    },
+    {
+      "type": "point",
+      "color": "#ffd8b0",
+      "intensity": 0.933,
+      "position": [
+        0.0,
+        2.0,
+        0.0
+      ],
+      "castShadow": false
+    }
+  ],
   "objects": [
     {
-      "id": "strand_left_0",
-      "type": "cylinder",
+      "id": "oxygen_nucleus",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.5,
+        "width": null,
+        "height": null,
+        "depth": null,
+        "innerRadius": null,
+        "outerRadius": null,
+        "tube": null,
+        "thetaSegments": null
+      },
+      "model": null,
       "position": [
-        1.15,
-        0.0,
-        0.0
-      ],
-      "color": [
-        0.7529,
-        0.6824,
-        0.3647
-      ],
-      "animation": "none",
-      "orbit_center": [
         0.0,
         0.0,
-        0.0
+        0.45
       ],
-      "orbit_speed": 0.0,
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "rotation": null,
+      "material": {
+        "type": "standard",
+        "color": "#ff0000",
+        "roughness": 0.428,
+        "metalness": 0.16,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissive": null,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none",
+        "center": null,
+        "speed": null,
+        "axis": null,
+        "phase": null
+      },
+      "label": "Oxygen Nucleus",
       "parent": null,
-      "material": null,
-      "scale": null,
+      "color": null,
+      "orbit_center": null,
+      "orbit_speed": null,
       "metadata": null
     },
     {
-      "id": "strand_right_0",
-      "type": "cylinder",
+      "id": "hydrogen_1",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.25,
+        "width": null,
+        "height": null,
+        "depth": null,
+        "innerRadius": null,
+        "outerRadius": null,
+        "tube": null,
+        "thetaSegments": null
+      },
+      "model": null,
       "position": [
-        -1.15,
-        0.0,
-        1.408343819019456e-16
+        0.3228102409047853,
+        0.95,
+        0.3135180192062244
       ],
-      "color": [
-        0.0392,
-        0.1608,
-        0.7843
+      "scale": [
+        0.5,
+        0.5,
+        0.5
       ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
+      "rotation": null,
+      "material": {
+        "type": "standard",
+        "color": "#ffffff",
+        "roughness": 0.428,
+        "metalness": 0.16,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissive": null,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none",
+        "center": null,
+        "speed": null,
+        "axis": null,
+        "phase": null
+      },
+      "label": "Hydrogen 1",
+      "parent": "oxygen_nucleus",
+      "color": null,
+      "orbit_center": null,
+      "orbit_speed": null,
       "metadata": null
     },
     {
-      "id": "base_pair_0",
-      "type": "cylinder",
+      "id": "hydrogen_2",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.25,
+        "width": null,
+        "height": null,
+        "depth": null,
+        "innerRadius": null,
+        "outerRadius": null,
+        "tube": null,
+        "thetaSegments": null
+      },
+      "model": null,
       "position": [
-        0.0,
-        0.0,
-        0.0
+        0.4498081213686773,
+        1.9,
+        -0.013139785035579967
       ],
-      "color": [
-        0.6627,
-        0.8549,
-        0.7373
+      "scale": [
+        0.5,
+        0.5,
+        0.5
       ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_left_1",
-      "type": "cylinder",
-      "position": [
-        -0.9303695435311894,
-        0.85,
-        0.6759530401363442
-      ],
-      "color": [
-        0.3843,
-        0.4863,
-        0.5216
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.85,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_right_1",
-      "type": "cylinder",
-      "position": [
-        0.9303695435311894,
-        0.85,
-        -0.6759530401363443
-      ],
-      "color": [
-        0.4471,
-        0.03,
-        0.7843
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.85,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "base_pair_1",
-      "type": "cylinder",
-      "position": [
-        0.0,
-        0.85,
-        0.0
-      ],
-      "color": [
-        0.5686,
-        0.2941,
-        0.8706
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_left_2",
-      "type": "cylinder",
-      "position": [
-        0.35536954353118927,
-        1.7,
-        -1.0937149937394266
-      ],
-      "color": [
-        0.4471,
-        0.5333,
-        0.2667
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        1.7,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_right_2",
-      "type": "cylinder",
-      "position": [
-        -0.35536954353118916,
-        1.7,
-        1.0937149937394266
-      ],
-      "color": [
-        0.4863,
-        0.2078,
-        0.2863
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        1.7,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "base_pair_2",
-      "type": "cylinder",
-      "position": [
-        0.0,
-        1.7,
-        0.0
-      ],
-      "color": [
-        0.6275,
-        0.8902,
-        0.5255
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_left_3",
-      "type": "cylinder",
-      "position": [
-        0.3553695435311899,
-        2.55,
-        1.0937149937394264
-      ],
-      "color": [
-        0.3765,
-        0.5686,
-        0.0549
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        2.55,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_right_3",
-      "type": "cylinder",
-      "position": [
-        -0.35536954353119,
-        2.55,
-        -1.0937149937394264
-      ],
-      "color": [
-        0.0706,
-        0.949,
-        0.4588
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        2.55,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "base_pair_3",
-      "type": "cylinder",
-      "position": [
-        0.0,
-        2.55,
-        0.0
-      ],
-      "color": [
-        0.5569,
-        0.03,
-        0.8196
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_left_4",
-      "type": "cylinder",
-      "position": [
-        -0.9303695435311897,
-        3.4,
-        -0.6759530401363437
-      ],
-      "color": [
-        0.1804,
-        0.2353,
-        0.7529
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        3.4,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "strand_right_4",
-      "type": "cylinder",
-      "position": [
-        0.9303695435311898,
-        3.4,
-        0.6759530401363435
-      ],
-      "color": [
-        0.4431,
-        0.3843,
-        0.5686
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        3.4,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
-      "metadata": null
-    },
-    {
-      "id": "base_pair_4",
-      "type": "cylinder",
-      "position": [
-        0.0,
-        3.4,
-        0.0
-      ],
-      "color": [
-        0.6902,
-        0.3373,
-        0.6118
-      ],
-      "animation": "none",
-      "orbit_center": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "orbit_speed": 0.0,
-      "parent": null,
-      "material": null,
-      "scale": null,
+      "rotation": null,
+      "material": {
+        "type": "standard",
+        "color": "#ffffff",
+        "roughness": 0.428,
+        "metalness": 0.16,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissive": null,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none",
+        "center": null,
+        "speed": null,
+        "axis": null,
+        "phase": null
+      },
+      "label": "Hydrogen 2",
+      "parent": "oxygen_nucleus",
+      "color": null,
+      "orbit_center": null,
+      "orbit_speed": null,
       "metadata": null
     }
   ]
