@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -23,6 +23,9 @@ from core.state.ipc_store import (
     publish_scene_command,
     publish_control_command,
 )
+from core.utils.logger import get_logger
+
+logger = get_logger("api_server")
 
 app = FastAPI(title="HoloScript API", version="1.0.0")
 
@@ -38,6 +41,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def log_unhandled_exception(request: Request, exc: Exception):
+    logger.exception("Unhandled exception at %s %s", request.method, request.url.path)
+    return {"detail": "Internal server error"}
 
 
 # ---------------------------------------------------------------------------

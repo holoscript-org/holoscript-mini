@@ -20,6 +20,9 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentZoom, setCurrentZoom] = useState(zoom)
+  // Keep zoom in a ref so the animation loop reads the latest value without
+  // restarting when zoom changes frequently (e.g. during gesture OPEN_PALM).
+  const zoomRef = useRef(zoom)
   const animationRef = useRef<number | null>(null)
   const lastDrawTsRef = useRef(0)
   const timeRef = useRef(0)
@@ -28,9 +31,10 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
   // re-registering the effect every poll tick.
   const frameRef = useRef<Frame>(null)
 
-  // Update zoom when prop changes
+  // Update zoom when prop changes — keep both state (for JSX) and ref (for canvas loop) in sync
   useEffect(() => {
     setCurrentZoom(zoom)
+    zoomRef.current = zoom
   }, [zoom])
 
   // Update rotation when prop changes
@@ -71,7 +75,7 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
       const h = canvas.height
       const cx = w / 2
       const cy = h / 2
-      const maxRadius = Math.min(cx, cy) * 0.88 * currentZoom
+      const maxRadius = Math.min(cx, cy) * 0.88 * zoomRef.current
 
       ctx.fillStyle = "rgb(0, 10, 20)"
       ctx.fillRect(0, 0, w, h)
@@ -151,9 +155,9 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
       const centerX = canvas.width / 2
       const centerY = canvas.height / 2
       const baseRadius = Math.min(canvas.width, canvas.height) * 0.35
-      const radius = baseRadius * currentZoom
+      const radius = baseRadius * zoomRef.current
 
-      ctx.font = `${Math.max(8, 10 * currentZoom)}px monospace`
+      ctx.font = `${Math.max(8, 10 * zoomRef.current)}px monospace`
 
       for (let i = 0; i < 200; i++) {
         const phi = (i / 200) * Math.PI * 2 + timeRef.current
@@ -221,7 +225,8 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
         cancelAnimationFrame(animationRef.current)
       }
     }
-  }, [currentZoom])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -256,13 +261,14 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
             : "aspect-square md:aspect-auto md:h-[400px] lg:h-[500px]"
         }`}
       >
-        <canvas 
-          ref={canvasRef} 
+        <canvas
+          ref={canvasRef}
           className="w-full h-full"
           onWheel={(e) => {
             e.preventDefault()
             const zoomChange = e.deltaY * -0.001
             const newZoom = Math.max(0.5, Math.min(3, currentZoom + zoomChange))
+            zoomRef.current = newZoom
             setCurrentZoom(newZoom)
             onZoomChange?.(newZoom)
           }}
@@ -279,9 +285,10 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
 
         {/* Zoom indicator */}
         <div className="absolute top-2 left-2 flex items-center gap-2 px-2 py-1 rounded border border-primary/30 bg-background/80">
-          <button 
+          <button
             onClick={() => {
               const newZoom = Math.max(0.5, currentZoom - 0.1)
+              zoomRef.current = newZoom
               setCurrentZoom(newZoom)
               onZoomChange?.(newZoom)
             }}
@@ -294,9 +301,10 @@ export function POVSimulation({ zoom = 1, rotation, onZoomChange, compact = fals
           <span className="text-xs font-mono text-primary w-[32px] text-center">
             {(currentZoom * 100).toFixed(0)}%
           </span>
-          <button 
+          <button
             onClick={() => {
               const newZoom = Math.min(3, currentZoom + 0.1)
+              zoomRef.current = newZoom
               setCurrentZoom(newZoom)
               onZoomChange?.(newZoom)
             }}

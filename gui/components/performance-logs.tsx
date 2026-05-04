@@ -23,17 +23,91 @@ const initialLogs: LogEntry[] = [
   { timestamp: "11:00:03.106", message: "Voice → 'Reset and show a galaxy cluster'" },
 ]
 
+const BACKEND_STREAM = "http://localhost:8000/stream"
+
 interface PerformanceLogsProps {
   /** Live log strings from the backend. When provided, shown instead of demo data. */
   liveLogs?: string[]
+  /** Three.js render FPS passed in from the parent (via ThreeScene onFpsUpdate). */
+  guiFps?: number
 }
 
-export function PerformanceLogs({ liveLogs }: PerformanceLogsProps) {
-  const [guiFps, setGuiFps] = useState(27.0)
-  const [simFps, setSimFps] = useState(14.6)
+export function PerformanceLogs({ liveLogs, guiFps: guiFpsProp }: PerformanceLogsProps) {
+  const [guiFps, setGuiFps]   = useState(guiFpsProp ?? 27.0)
+  const [simFps, setSimFps]   = useState<number | null>(null)
   const [fpsHistory, setFpsHistory] = useState<number[]>(Array(60).fill(27))
-  const [simHistory, setSimHistory] = useState<number[]>(Array(60).fill(14.6))
+  const [simHistory, setSimHistory] = useState<number[]>(Array(60).fill(0))
   const logsRef = useRef<HTMLDivElement>(null)
+
+  // Sync guiFps prop into state (throttled by React batching)
+  useEffect(() => {
+    if (guiFpsProp !== undefined) {
+      setGuiFps(guiFpsProp)
+      setFpsHistory((prev) => [...prev.slice(1), guiFpsProp])
+    }
+  }, [guiFpsProp])
+
+  // Derive Sim FPS from /stream MJPEG boundary timing
+  useEffect(() => {
+    let active = true
+    let controller: AbortController | null = null
+
+    const measure = async () => {
+      try {
+        controller = new AbortController()
+        const res = await fetch(BACKEND_STREAM, {
+          signal: controller.signal,
+        })
+        if (!res.body) return
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let frameCount = 0
+        let windowStartMs = performance.now()
+        let remainder = ""
+
+        while (active) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const text = decoder.decode(value, { stream: true })
+          const combined = remainder + text
+          const parts = combined.split("--frame")
+          remainder = parts.pop() ?? ""
+          frameCount += parts.length
+
+          const nowMs = performance.now()
+          if (nowMs - windowStartMs >= 1000) {
+            const fps = Math.round((frameCount * 1000) / (nowMs - windowStartMs))
+            if (active) {
+              setSimFps(fps)
+              setSimHistory((prev) => [...prev.slice(1), fps])
+            }
+            frameCount = 0
+            windowStartMs = nowMs
+          }
+        }
+      } catch {
+        if (active) setSimFps(null)
+      }
+    }
+
+    measure()
+    return () => {
+      active = false
+      controller?.abort()
+    }
+  }, [])
+
+  // Fallback simulated GUI FPS when no prop is provided
+  useEffect(() => {
+    if (guiFpsProp !== undefined) return
+    const interval = setInterval(() => {
+      const fps = 25 + Math.random() * 10
+      setGuiFps(fps)
+      setFpsHistory((prev) => [...prev.slice(1), fps])
+    }, 450)
+    return () => clearInterval(interval)
+  }, [guiFpsProp])
 
   // Convert live log strings (e.g. "[10:00:01.123] msg") into LogEntry shape,
   // falling back to static demo logs when backend is offline.
@@ -45,21 +119,6 @@ export function PerformanceLogs({ liveLogs }: PerformanceLogsProps) {
           : { timestamp: "", message: raw }
       })
     : initialLogs
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newGuiFps = 25 + Math.random() * 10
-      const newSimFps = 12 + Math.random() * 6
-
-      setGuiFps(newGuiFps)
-      setSimFps(newSimFps)
-
-      setFpsHistory((prev) => [...prev.slice(1), newGuiFps])
-      setSimHistory((prev) => [...prev.slice(1), newSimFps])
-    }, 450)
-
-    return () => clearInterval(interval)
-  }, [])
 
   useEffect(() => {
     if (logsRef.current) {
@@ -108,10 +167,12 @@ export function PerformanceLogs({ liveLogs }: PerformanceLogsProps) {
         <div className="grid grid-cols-[100px_1fr] gap-4 items-center">
           <div>
             <div className="text-xs text-muted-foreground font-mono">Sim FPS</div>
-            <div className="text-lg font-mono text-primary">{simFps.toFixed(1)} fps</div>
+            <div className="text-lg font-mono text-primary">
+              {simFps !== null ? `${simFps} fps` : "— fps"}
+            </div>
           </div>
           <div className="bg-background/50 rounded p-2 border border-primary/10">
-            {renderGraph(simHistory, "#00ffff", 25)}
+            {renderGraph(simHistory, "#00ffff", 35)}
           </div>
         </div>
 

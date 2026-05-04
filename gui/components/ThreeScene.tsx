@@ -13,8 +13,8 @@
  *  - ObjectRegistry: world-position lookup for center_ref orbit (non-parented)
  */
 
-import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Canvas, useFrame } from "@react-three/fiber"
+import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, OrbitControls, PerspectiveCamera, Text, useGLTF, useTexture } from "@react-three/drei"
 import * as THREE from "three"
 import type { GestureControlRefs } from "@/hooks/useGestureControl"
@@ -36,6 +36,15 @@ const ObjectRegistry = createContext<RegistryRef>({ current: new Map() })
 // ─── Frozen context (gesture freeze stops all animation) ──────────────────────
 
 const FrozenContext = createContext<boolean>(false)
+
+// ─── Selected object context ─────────────────────────────────────────────────
+
+const SelectedContext = createContext<string | null>(null)
+
+// ─── Drag offsets context ───────────────────────────────────────────────────
+
+type DragOffsetRef = React.MutableRefObject<Map<string, THREE.Vector3>>
+const DragOffsetContext = createContext<DragOffsetRef>({ current: new Map() })
 
 // ─── Material helpers ─────────────────────────────────────────────────────────
 
@@ -195,15 +204,19 @@ function MeshObject({ obj }: { obj: SceneObject }) {
 
 function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React.ReactNode }) {
   const registry = useContext(ObjectRegistry)
+  const dragOffsets = useContext(DragOffsetContext)
   const groupRef  = useRef<THREE.Group>(null!)
 
-  // Register this group for center_ref lookup
+  // Register this group for center_ref lookup and raycast identification
   useEffect(() => {
     registry.current.set(obj.id, groupRef.current)
+    groupRef.current.userData.sceneObjectId = obj.id
     return () => { registry.current.delete(obj.id) }
   }, [obj.id, registry])
 
-  const frozen    = useContext(FrozenContext)
+  const frozen     = useContext(FrozenContext)
+  const selectedId = useContext(SelectedContext)
+  const isSelected = selectedId === obj.id
   const anim      = obj.animation ?? { type: "none" }
   const isOrbit   = anim.type === "orbit"
   const hasParent = !!obj.parent
@@ -219,6 +232,8 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
   useFrame((_, delta) => {
     if (!groupRef.current || frozen) return
 
+    const offset = dragOffsets.current.get(obj.id)
+
     if (isOrbit) {
       let cx = staticCenter[0], cy = orbitY.current, cz = staticCenter[2]
       // center_ref: world-space lookup, only meaningful for non-parented objects
@@ -230,6 +245,17 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
       groupRef.current.position.x = cx + orbitRadius.current * Math.cos(orbitAngle.current)
       groupRef.current.position.y = cy
       groupRef.current.position.z = cz + orbitRadius.current * Math.sin(orbitAngle.current)
+      if (offset) {
+        groupRef.current.position.x += offset.x
+        groupRef.current.position.y += offset.y
+        groupRef.current.position.z += offset.z
+      }
+    } else if (offset) {
+      groupRef.current.position.set(
+        obj.position[0] + offset.x,
+        obj.position[1] + offset.y,
+        obj.position[2] + offset.z
+      )
     }
 
     if (anim.type === "spin") {
@@ -287,6 +313,10 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
         >
           {obj.label}
         </Text>
+      )}
+      {/* Selection glow — cyan point light at object centre */}
+      {isSelected && (
+        <pointLight color="#00ffff" intensity={6} distance={3} decay={2} />
       )}
       {/* Child objects in parent-local space */}
       {children}
@@ -364,17 +394,73 @@ function SceneLights({ lights }: { lights: LightDef[] }) {
 
 // ─── FPS tracker (inside Canvas) ─────────────────────────────────────────────
 
-function FPSMeter({ fpsRef }: { fpsRef: React.MutableRefObject<number> }) {
-  const frames   = useRef(0)
-  const lastTime = useRef(performance.now())
+function FPSMeter({
+  fpsRef,
+  onFpsUpdate,
+}: {
+  fpsRef: React.MutableRefObject<number>
+  onFpsUpdate?: (fps: number) => void
+}) {
+  const frames      = useRef(0)
+  const lastTime    = useRef(performance.now())
+  const onUpdateRef = useRef(onFpsUpdate)
+  useEffect(() => { onUpdateRef.current = onFpsUpdate }, [onFpsUpdate])
+
   useFrame(() => {
     frames.current++
     const now = performance.now()
     if (now - lastTime.current >= 500) {
-      fpsRef.current = Math.round((frames.current * 1000) / (now - lastTime.current))
-      frames.current  = 0
+      const fps = Math.round((frames.current * 1000) / (now - lastTime.current))
+      fpsRef.current   = fps
+      frames.current   = 0
       lastTime.current = now
+      onUpdateRef.current?.(fps)
     }
+  })
+  return null
+}
+
+// ─── Raycast selector (inside Canvas) ────────────────────────────────────────
+
+interface SelectTrigger {
+  x: number   // normalised 0–1 (camera space, pre-mirror)
+  y: number   // normalised 0–1
+  seq: number // increments on each new trigger so useFrame can diff
+}
+
+function RaycastSelector({
+  triggerRef,
+  onSelect,
+}: {
+  triggerRef: React.MutableRefObject<SelectTrigger | null>
+  onSelect: (id: string | null) => void
+}) {
+  const { camera, scene } = useThree()
+  const raycaster  = useRef(new THREE.Raycaster())
+  const lastSeqRef = useRef(-1)
+
+  useFrame(() => {
+    const t = triggerRef.current
+    if (!t || t.seq === lastSeqRef.current) return
+    lastSeqRef.current = t.seq
+
+    // Flip x for mirror, invert y for NDC
+    const ndcX = 1 - 2 * t.x
+    const ndcY = 1 - 2 * t.y
+    raycaster.current.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera)
+    const hits = raycaster.current.intersectObjects(scene.children, true)
+
+    for (const hit of hits) {
+      let obj: THREE.Object3D | null = hit.object
+      while (obj) {
+        if (obj.userData.sceneObjectId) {
+          onSelect(obj.userData.sceneObjectId as string)
+          return
+        }
+        obj = obj.parent
+      }
+    }
+    onSelect(null)
   })
   return null
 }
@@ -384,15 +470,23 @@ function GestureSceneRoot({
   rotationY,
   scale,
   frozen,
+  sceneOffsetRef,
+  sceneRootRef,
   children,
 }: {
   controls?: GestureControlRefs
   rotationY: number
   scale: number
   frozen: boolean
+  sceneOffsetRef?: React.MutableRefObject<THREE.Vector3>
+  sceneRootRef?: React.MutableRefObject<THREE.Group | null>
   children: React.ReactNode
 }) {
   const groupRef = useRef<THREE.Group>(null)
+
+  useEffect(() => {
+    if (sceneRootRef) sceneRootRef.current = groupRef.current
+  }, [sceneRootRef])
 
   useFrame(() => {
     if (!groupRef.current) return
@@ -401,6 +495,9 @@ function GestureSceneRoot({
     const nextScale = controls?.scaleRef.current ?? scale
     groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextRotationY)
     groupRef.current.scale.setScalar(nextScale)
+    if (sceneOffsetRef) {
+      groupRef.current.position.copy(sceneOffsetRef.current)
+    }
   })
 
   return (
@@ -485,13 +582,48 @@ interface ThreeSceneProps {
   rotationY?: number
   scale?: number
   frozen?: boolean
+  selectTrigger?: SelectTrigger | null
+  reticlePoint?: { x: number; y: number } | null
+  sceneDragMode?: boolean
+  resetSeq?: number
+  onObjectSelect?: (id: string | null) => void
+  onFpsUpdate?: (fps: number) => void
 }
 
-export function ThreeScene({ scene, controls, rotationY = 0, scale = 1, frozen = false }: ThreeSceneProps) {
-  const [mounted, setMounted] = useState(false)
-  const [fps, setFps]         = useState(0)
-  const fpsRef                = useRef(0)
-  const registryRef           = useRef<Map<string, THREE.Group>>(new Map())
+export function ThreeScene({
+  scene,
+  controls,
+  rotationY = 0,
+  scale = 1,
+  frozen = false,
+  selectTrigger,
+  reticlePoint,
+  sceneDragMode = false,
+  resetSeq = 0,
+  onObjectSelect,
+  onFpsUpdate,
+}: ThreeSceneProps) {
+  const [mounted, setMounted]     = useState(false)
+  const [fps, setFps]             = useState(0)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const fpsRef                    = useRef(0)
+  const registryRef               = useRef<Map<string, THREE.Group>>(new Map())
+  const selectTriggerRef          = useRef<SelectTrigger | null>(null)
+  const onObjectSelectRef         = useRef(onObjectSelect)
+  const dragOffsetsRef            = useRef<Map<string, THREE.Vector3>>(new Map())
+  const sceneOffsetRef            = useRef(new THREE.Vector3(0, 0, 0))
+  const sceneRootRef              = useRef<THREE.Group | null>(null)
+  const orbitRef                  = useRef<unknown>(null)
+  const initialCamRef             = useRef<{ position: [number, number, number]; target: [number, number, number] } | null>(null)
+  const lastSceneSigRef           = useRef<string>("")
+
+  useEffect(() => { onObjectSelectRef.current = onObjectSelect }, [onObjectSelect])
+  useEffect(() => { selectTriggerRef.current = selectTrigger ?? null }, [selectTrigger])
+
+  const handleSelect = useCallback((id: string | null) => {
+    setSelectedId(id)
+    onObjectSelectRef.current?.(id)
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -539,6 +671,25 @@ export function ThreeScene({ scene, controls, rotationY = 0, scale = 1, frozen =
     [validScene.objects]
   )
 
+  const cam = validScene.camera
+
+  useEffect(() => {
+    const sig = JSON.stringify({ pos: cam.position, tgt: cam.target })
+    if (lastSceneSigRef.current !== sig) {
+      lastSceneSigRef.current = sig
+      initialCamRef.current = {
+        position: [cam.position[0], cam.position[1], cam.position[2]],
+        target: [cam.target[0], cam.target[1], cam.target[2]],
+      }
+    }
+  }, [cam.position, cam.target])
+
+  useEffect(() => {
+    dragOffsetsRef.current.clear()
+    sceneOffsetRef.current.set(0, 0, 0)
+    setSelectedId(null)
+  }, [resetSeq])
+
   if (!mounted) {
     return (
       <div className="w-full h-full flex items-center justify-center rounded-lg border border-primary/20 bg-black/30">
@@ -555,41 +706,106 @@ export function ThreeScene({ scene, controls, rotationY = 0, scale = 1, frozen =
     )
   }
 
-  const cam = validScene.camera
-
   return (
     <div className="relative w-full h-full rounded-lg overflow-hidden border border-primary/20 bg-black">
-      <ObjectRegistry.Provider value={registryRef}>
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          frameloop={frozen ? "demand" : "always"}
-          gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0, antialias: true }}
-          onCreated={({ gl }) => {
-            gl.shadowMap.enabled = true
-            gl.shadowMap.type    = THREE.PCFSoftShadowMap
-          }}
-        >
-          <PerspectiveCamera makeDefault position={cam.position} fov={cam.fov ?? 65} near={0.05} far={5000} />
-          <OrbitControls target={cam.target} enablePan enableZoom enableRotate minDistance={0.5} maxDistance={2000} />
+      <SelectedContext.Provider value={selectedId}>
+        <ObjectRegistry.Provider value={registryRef}>
+          <DragOffsetContext.Provider value={dragOffsetsRef}>
+          <Canvas
+            shadows
+            dpr={[1, 2]}
+            frameloop="always"
+            gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0, antialias: true }}
+            onCreated={({ gl }) => {
+              gl.shadowMap.enabled = true
+              gl.shadowMap.type    = THREE.PCFSoftShadowMap
+            }}
+          >
+            <PerspectiveCamera makeDefault position={cam.position} fov={cam.fov ?? 65} near={0.05} far={5000} />
+            <OrbitControls
+              ref={orbitRef}
+              target={cam.target}
+              enablePan
+              enableZoom
+              enableRotate
+              minDistance={0.5}
+              maxDistance={2000}
+            />
 
-          <SceneLights lights={validScene.lights} />
+            <SceneLights lights={validScene.lights} />
 
-          <Suspense fallback={null}>
-            <Environment preset="city" />
-          </Suspense>
-
-          <GestureSceneRoot controls={controls} rotationY={rotationY} scale={scale} frozen={frozen}>
             <Suspense fallback={null}>
-              {rootObjects.map((obj) => (
-                <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
-              ))}
+              <Environment preset="city" />
             </Suspense>
-          </GestureSceneRoot>
 
-          <FPSMeter fpsRef={fpsRef} />
-        </Canvas>
-      </ObjectRegistry.Provider>
+            <GestureSceneRoot
+              controls={controls}
+              rotationY={rotationY}
+              scale={scale}
+              frozen={frozen}
+              sceneOffsetRef={sceneOffsetRef}
+              sceneRootRef={sceneRootRef}
+            >
+              <Suspense fallback={null}>
+                {rootObjects.map((obj) => (
+                  <ObjectTree key={obj.id} obj={obj} childMap={childMap} />
+                ))}
+              </Suspense>
+            </GestureSceneRoot>
+
+            <FPSMeter fpsRef={fpsRef} onFpsUpdate={onFpsUpdate} />
+            <RaycastSelector triggerRef={selectTriggerRef} onSelect={handleSelect} />
+            <CameraResetController resetSeq={resetSeq} cam={initialCamRef.current ?? cam} orbitRef={orbitRef} />
+            <DragController
+              reticlePoint={reticlePoint}
+              selectedId={selectedId}
+              registryRef={registryRef}
+              dragOffsetsRef={dragOffsetsRef}
+              sceneOffsetRef={sceneOffsetRef}
+              sceneRootRef={sceneRootRef}
+              sceneDragMode={sceneDragMode}
+            />
+          </Canvas>
+          </DragOffsetContext.Provider>
+        </ObjectRegistry.Provider>
+      </SelectedContext.Provider>
+
+      {reticlePoint && (
+        <div className="absolute inset-0 pointer-events-none">
+          <div
+            className="absolute h-6 w-6 rounded-full border-2 border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.9)]"
+            style={{
+              left: `${(1 - reticlePoint.x) * 100}%`,
+              top: `${reticlePoint.y * 100}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+          <div
+            className="absolute h-3 w-3 rounded-full border border-yellow-300/80"
+            style={{
+              left: `${(1 - reticlePoint.x) * 100}%`,
+              top: `${reticlePoint.y * 100}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+          <div
+            className="absolute h-px w-7 bg-yellow-300/90"
+            style={{
+              left: `${(1 - reticlePoint.x) * 100}%`,
+              top: `${reticlePoint.y * 100}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+          <div
+            className="absolute h-7 w-px bg-yellow-300/90"
+            style={{
+              left: `${(1 - reticlePoint.x) * 100}%`,
+              top: `${reticlePoint.y * 100}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+        </div>
+      )}
 
       <DebugPanel
         scene={validScene}
@@ -601,4 +817,143 @@ export function ThreeScene({ scene, controls, rotationY = 0, scale = 1, frozen =
       />
     </div>
   )
+}
+
+// ─── Camera reset controller (inside Canvas) ───────────────────────────────
+
+function CameraResetController({
+  resetSeq,
+  cam,
+  orbitRef,
+}: {
+  resetSeq: number
+  cam: { position: [number, number, number]; target: [number, number, number] }
+  orbitRef: React.MutableRefObject<unknown>
+}) {
+  const { camera } = useThree()
+
+  useEffect(() => {
+    camera.position.set(cam.position[0], cam.position[1], cam.position[2])
+    camera.lookAt(cam.target[0], cam.target[1], cam.target[2])
+    camera.updateProjectionMatrix()
+
+    const controls = orbitRef.current as {
+      target?: THREE.Vector3
+      update?: () => void
+      reset?: () => void
+      saveState?: () => void
+    } | null
+    if (controls?.target) {
+      controls.target.set(cam.target[0], cam.target[1], cam.target[2])
+      controls.update?.()
+      controls.saveState?.()
+    }
+    controls?.reset?.()
+  }, [resetSeq, cam, camera, orbitRef])
+
+  return null
+}
+
+// ─── Drag controller (inside Canvas) ─────────────────────────────────────────
+
+function DragController({
+  reticlePoint,
+  selectedId,
+  registryRef,
+  dragOffsetsRef,
+  sceneOffsetRef,
+  sceneRootRef,
+  sceneDragMode,
+}: {
+  reticlePoint?: { x: number; y: number } | null
+  selectedId: string | null
+  registryRef: React.MutableRefObject<Map<string, THREE.Group>>
+  dragOffsetsRef: React.MutableRefObject<Map<string, THREE.Vector3>>
+  sceneOffsetRef: React.MutableRefObject<THREE.Vector3>
+  sceneRootRef: React.MutableRefObject<THREE.Group | null>
+  sceneDragMode: boolean
+}) {
+  const { camera } = useThree()
+  const raycaster = useRef(new THREE.Raycaster())
+  const plane = useRef(new THREE.Plane())
+  const dragModeRef = useRef<"scene" | "object" | null>(null)
+  const dragTargetRef = useRef<string | null>(null)
+  const grabOffsetRef = useRef(new THREE.Vector3())
+  const baseLocalRef = useRef(new THREE.Vector3())
+
+  useFrame(() => {
+    if (!reticlePoint) {
+      dragModeRef.current = null
+      dragTargetRef.current = null
+      return
+    }
+
+    const targetMode: "scene" | "object" | null = sceneDragMode
+      ? "scene"
+      : selectedId
+        ? "object"
+        : null
+
+    if (!targetMode) return
+
+    const ndcX = 1 - 2 * reticlePoint.x
+    const ndcY = 1 - 2 * reticlePoint.y
+    raycaster.current.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera)
+
+    if (dragModeRef.current !== targetMode || dragTargetRef.current !== selectedId) {
+      dragModeRef.current = targetMode
+      dragTargetRef.current = selectedId
+
+      const camDir = new THREE.Vector3()
+      camera.getWorldDirection(camDir)
+
+      if (targetMode === "scene") {
+        const root = sceneRootRef.current
+        if (!root) return
+        const worldPos = root.getWorldPosition(new THREE.Vector3())
+        plane.current.setFromNormalAndCoplanarPoint(camDir, worldPos)
+        const hit = raycaster.current.ray.intersectPlane(plane.current, new THREE.Vector3())
+        if (hit) grabOffsetRef.current.copy(worldPos).sub(hit)
+        return
+      }
+
+      if (!selectedId) return
+      const group = registryRef.current.get(selectedId)
+      if (!group) return
+      const worldPos = group.getWorldPosition(new THREE.Vector3())
+      plane.current.setFromNormalAndCoplanarPoint(camDir, worldPos)
+      const hit = raycaster.current.ray.intersectPlane(plane.current, new THREE.Vector3())
+      if (hit) grabOffsetRef.current.copy(worldPos).sub(hit)
+      const base = group.parent
+        ? group.parent.worldToLocal(worldPos.clone())
+        : worldPos.clone()
+      baseLocalRef.current.copy(base)
+    }
+
+    const hit = raycaster.current.ray.intersectPlane(plane.current, new THREE.Vector3())
+    if (!hit) return
+    const desiredWorld = hit.add(grabOffsetRef.current)
+
+    if (targetMode === "scene") {
+      sceneOffsetRef.current.copy(desiredWorld)
+      return
+    }
+
+    if (!selectedId) return
+    const group = registryRef.current.get(selectedId)
+    if (!group) return
+
+    const localPos = group.parent
+      ? group.parent.worldToLocal(desiredWorld.clone())
+      : desiredWorld.clone()
+    const offset = localPos.sub(baseLocalRef.current)
+    const stored = dragOffsetsRef.current.get(selectedId)
+    if (stored) {
+      stored.copy(offset)
+    } else {
+      dragOffsetsRef.current.set(selectedId, offset.clone())
+    }
+  })
+
+  return null
 }

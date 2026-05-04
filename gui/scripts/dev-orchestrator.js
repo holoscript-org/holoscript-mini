@@ -3,7 +3,7 @@
 
 /**
  * HoloScript dev orchestrator.
- * Starts backend, renderer (+ gesture engine), and Next.js GUI concurrently.
+ * Starts backend and Next.js GUI concurrently.
  * All processes share stdout/stderr with clear prefixes and terminate together.
  */
 
@@ -69,6 +69,15 @@ function spawnProc(label, color, cmd, args, cwd) {
   return proc;
 }
 
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`${tag("ORCH", CLR.err)} uncaughtException: ${err.stack || err.message}\n`);
+});
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
+  process.stderr.write(`${tag("ORCH", CLR.err)} unhandledRejection: ${message}\n`);
+});
+
 // ── Launch services ───────────────────────────────────────────────────────────
 process.stdout.write(
   `${tag("ORCH", CLR.orch)} HoloScript starting — root: ${ROOT_DIR}\n`
@@ -89,13 +98,6 @@ const backend = spawnProc(
   ROOT_DIR
 );
 
-const renderer = spawnProc(
-  "RENDERER", CLR.renderer,
-  PY,
-  [path.join("renderer", "main", "render_window.py")],
-  ROOT_DIR
-);
-
 const gui = spawnProc(
   "GUI", CLR.gui,
   NPM,
@@ -105,7 +107,6 @@ const gui = spawnProc(
 
 const ALL = [
   { proc: backend,  label: "BACKEND"  },
-  { proc: renderer, label: "RENDERER" },
   { proc: gui,      label: "GUI"      },
 ];
 

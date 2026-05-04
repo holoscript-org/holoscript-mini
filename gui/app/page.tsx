@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback } from "react"
+import { useCallback, useRef, useState } from "react"
 import { POVSimulation } from "@/components/pov-simulation"
 import { CameraPanel } from "@/components/camera-panel"
 import { CommandPanel } from "@/components/command-panel"
@@ -11,7 +11,7 @@ import { useWebGLSceneData } from "@/hooks/useWebGLSceneData"
 import { useGestureControl } from "@/hooks/useGestureControl"
 
 export default function HologramDashboard() {
-  // ── Scene data (JSON, POV frame, logs) — no longer used for transforms ──────
+  // ── Scene data (JSON, POV frame, logs) ───────────────────────────────────────
   const {
     frame,
     scene,
@@ -23,15 +23,59 @@ export default function HologramDashboard() {
   } = useWebGLSceneData()
 
   // ── Browser-side gesture transforms ──────────────────────────────────────────
-  const { state: gestureState, controls: gestureControls, processFrame, reset } = useGestureControl()
+  const { state: gestureState, controls: gestureControls, applyWorkerUpdate, reset, setScale } = useGestureControl()
+
+  // ── Three.js FPS (passed up from ThreeScene → shown in PerformanceLogs) ──────
+  const [threeFps, setThreeFps] = useState(0)
+
+  // ── Pinch-to-select state ────────────────────────────────────────────────────
+  const selectSeqRef = useRef(0)
+  const [selectTrigger, setSelectTrigger] = useState<{ x: number; y: number; seq: number } | null>(null)
+  const [reticlePoint, setReticlePoint] = useState<{ x: number; y: number } | null>(null)
+  const lastReticleMsRef = useRef(0)
+  const [sceneDragMode, setSceneDragMode] = useState(false)
+  const [resetSeq, setResetSeq] = useState(0)
+
+  const handlePinchSelect = useCallback((x: number, y: number) => {
+    setSelectTrigger({ x, y, seq: ++selectSeqRef.current })
+  }, [])
+
+  const handlePointMove = useCallback((point: { x: number; y: number } | null, nowMs: number) => {
+    if (nowMs - lastReticleMsRef.current < 33) return
+    lastReticleMsRef.current = nowMs
+    setReticlePoint(point)
+  }, [])
+
+  const handlePointHoldToggle = useCallback(() => {
+    setSceneDragMode((prev) => !prev)
+  }, [])
+
+  const handleReset = useCallback(() => {
+    reset()
+    setSceneDragMode(false)
+    setReticlePoint(null)
+    setSelectTrigger(null)
+    setResetSeq((prev) => prev + 1)
+  }, [reset])
+
+  const handleObjectSelect = useCallback((id: string | null) => {
+    // Selection state is managed inside ThreeScene; log here for debugging
+    if (id) console.log("[Selection]", id)
+  }, [])
+
+  // ── Zoom sync: POV wheel/buttons feed back into gesture scale ────────────────
+  const handleZoomChange = useCallback(
+    (newZoom: number) => { setScale(newZoom) },
+    [setScale]
+  )
 
   // ── Command panel integration (text commands affect transforms) ───────────────
   const handleCommandSend = useCallback(
     (command: string) => {
       const cmd = command.toLowerCase()
-      if (cmd.includes("reset")) reset()
+      if (cmd.includes("reset")) handleReset()
     },
-    [reset]
+    [handleReset]
   )
 
   return (
@@ -99,8 +143,14 @@ export default function HologramDashboard() {
             </div>
           )}
 
+          {sceneDragMode && (
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded border border-yellow-500/50 bg-yellow-500/10 text-xs font-mono text-yellow-300">
+              SCENE DRAG
+            </div>
+          )}
+
           <button
-            onClick={reset}
+            onClick={handleReset}
             className="px-3 py-1.5 text-xs font-mono border border-primary/30 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
           >
             Reset
@@ -115,6 +165,12 @@ export default function HologramDashboard() {
             scene={scene}
             controls={gestureControls}
             frozen={gestureState.frozen}
+            selectTrigger={selectTrigger}
+            reticlePoint={reticlePoint}
+            sceneDragMode={sceneDragMode}
+            resetSeq={resetSeq}
+            onObjectSelect={handleObjectSelect}
+            onFpsUpdate={setThreeFps}
           />
         </div>
 
@@ -123,19 +179,23 @@ export default function HologramDashboard() {
           {/* Top: POV simulation + gesture camera */}
           <div className="grid min-h-0 grid-cols-[0.85fr_1.15fr] gap-3 md:gap-4">
             <div className="min-h-0">
+              {/* zoom prop synced with gesture scale; wheel/buttons feed back via setScale */}
               <POVSimulation
-                onZoomChange={() => {}}
+                zoom={gestureState.scale}
+                onZoomChange={handleZoomChange}
                 frame={frame}
                 compact
               />
             </div>
             <div className="min-h-0">
-              {/*
-                CameraPanel calls onFrameData on every processed frame.
-                useGestureControl.processFrame translates landmarks → rotationY/scale/frozen.
-                No backend involved.
-              */}
-              <CameraPanel onFrameData={processFrame} compact />
+              <CameraPanel
+                onGestureUpdate={applyWorkerUpdate}
+                onPinchSelect={handlePinchSelect}
+                onPointMove={handlePointMove}
+                onPointHoldToggle={handlePointHoldToggle}
+                resetSeq={resetSeq}
+                compact
+              />
             </div>
           </div>
 
@@ -150,7 +210,7 @@ export default function HologramDashboard() {
               <SceneConfiguration liveScene={scene} />
             </div>
             <div className="min-h-0">
-              <PerformanceLogs liveLogs={logs} />
+              <PerformanceLogs liveLogs={logs} guiFps={threeFps} />
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { HoloPanel } from "./holo-panel"
 import { Video, VideoOff, Hand } from "lucide-react"
-import { classifyGesture, type GestureType, type HandLandmark } from "@/hooks/useGestureControl"
+import { type GestureType, type HandLandmark } from "@/hooks/useGestureControl"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,40 +21,86 @@ const MP_MODEL_URL =
 const CAMERA_WIDTH = 320
 const CAMERA_HEIGHT = 240
 const UI_UPDATE_MS = 125
+const MP_DETECT_INTERVAL_MS = 50
+const POINT_HOLD_TOGGLE_MS = 700
+
+const CONNECTIONS: [number, number][] = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
+]
+const TIP_INDICES = [4, 8, 12, 16, 20]
 
 type VideoWithFrameCallback = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: (now: number) => void) => number
   cancelVideoFrameCallback?: (handle: number) => void
 }
 
+interface WorkerUpdate {
+  rotationDelta: number
+  scaleDelta: number
+  gesture: GestureType
+  hands?: DetectedHand[]
+  handsDetected?: number
+  nowMs?: number
+  type?: "update"
+  indexTip?: { x: number; y: number } | null
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/** How long after last POINT gesture PINCH is still treated as "select" not "rotate" */
+const POINT_MODE_WINDOW_MS = 600
+
 export function CameraPanel({
-  onFrameData,
+  onGestureUpdate,
+  onPinchSelect,
+  onPointMove,
+  onPointHoldToggle,
+  resetSeq,
   compact = false,
 }: {
-  /**
-   * Called each processed camera frame with the primary hand's raw landmarks,
-   * classified gesture, and DOMHighResTimeStamp.
-   * Receives empty landmarks array when no hand is detected.
-   */
-  onFrameData?: (landmarks: HandLandmark[], gesture: GestureType, nowMs: number) => void
+  onGestureUpdate?: (rotationDelta: number, scaleDelta: number, gesture: GestureType, nowMs: number) => void
+  /** Called when a pinch fires shortly after a POINT gesture — provides normalised (0–1) index-tip coords */
+  onPinchSelect?: (x: number, y: number) => void
+  /** Called when POINT gesture provides a new index-tip position; null hides the reticle */
+  onPointMove?: (point: { x: number; y: number } | null, nowMs: number) => void
+  /** Called when POINT is held long enough to toggle scene-drag mode */
+  onPointHoldToggle?: () => void
+  /** Increments when the UI resets gesture state */
+  resetSeq?: number
   compact?: boolean
 }) {
+  const onGestureUpdateRef = useRef(onGestureUpdate)
+  const onPinchSelectRef  = useRef(onPinchSelect)
+  const onPointMoveRef    = useRef(onPointMove)
+  const onPointHoldToggleRef = useRef(onPointHoldToggle)
   const videoRef  = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
-  // MediaPipe HandLandmarker instance (null until loaded)
-  const landmarkerRef   = useRef<import("@mediapipe/tasks-vision").HandLandmarker | null>(null)
-  const mpLoadingRef    = useRef(false)
-  const lastDetectMsRef = useRef(0)
+  const workerRef = useRef<Worker | null>(null)
+  const lastVideoTimeRef = useRef(-1)
+  const lastHandsRef = useRef<DetectedHand[]>([])
+  const inFlightRef = useRef(false)
+  const lastSendMsRef = useRef(0)
 
   const animRafRef      = useRef<number | null>(null)
   const videoFrameCallbackRef = useRef<number | null>(null)
   const lastUiUpdateRef = useRef(0)
   const displayedGestureRef = useRef<GestureType>("NONE")
   const displayedHandsRef = useRef(0)
+  const debugIntervalRef = useRef<number | null>(null)
+  // ── Reticle / pinch-to-select ──────────────────────────────────────────────
+  const indexTipRef     = useRef<{ x: number; y: number } | null>(null)
+  const currentGestureRef = useRef<GestureType>("NONE")
+  const lastPointMsRef  = useRef(0)
+  const lastPointActiveRef = useRef(false)
+  const pointHoldStartRef = useRef<number | null>(null)
+  const pointHoldFiredRef = useRef(false)
 
   const [isStreaming,    setIsStreaming]    = useState(false)
   const [currentGesture, setCurrentGesture] = useState<GestureType>("NONE")
@@ -62,47 +108,142 @@ export function CameraPanel({
   const [mpReady,        setMpReady]        = useState(false)
   const [cameraError,    setCameraError]    = useState<string | null>(null)
 
-  // ── MediaPipe loading ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isStreaming || mpLoadingRef.current || landmarkerRef.current) return
-    mpLoadingRef.current = true
-    let cancelled = false
+  useEffect(() => { onGestureUpdateRef.current = onGestureUpdate }, [onGestureUpdate])
+  useEffect(() => { onPinchSelectRef.current  = onPinchSelect  }, [onPinchSelect])
+  useEffect(() => { onPointMoveRef.current    = onPointMove    }, [onPointMove])
+  useEffect(() => { onPointHoldToggleRef.current = onPointHoldToggle }, [onPointHoldToggle])
 
-    const load = async () => {
-      try {
-        const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision")
-        const vision = await FilesetResolver.forVisionTasks(MP_WASM_URL)
-        const hl = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MP_MODEL_URL,
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence:  0.5,
-          minTrackingConfidence:      0.5,
-        })
-        if (cancelled) { hl.close(); return }
-        landmarkerRef.current = hl
-        setMpReady(true)
-        console.log("[CameraPanel] MediaPipe HandLandmarker ready")
-      } catch (err) {
-        if (!cancelled) {
-          console.warn("[CameraPanel] MediaPipe unavailable:", err)
-          setCameraError("MediaPipe failed to load")
+  useEffect(() => {
+    lastPointMsRef.current = 0
+    lastPointActiveRef.current = false
+    pointHoldStartRef.current = null
+    pointHoldFiredRef.current = false
+    currentGestureRef.current = "NONE"
+    indexTipRef.current = null
+    displayedGestureRef.current = "NONE"
+    displayedHandsRef.current = 0
+    lastUiUpdateRef.current = 0
+    setCurrentGesture("NONE")
+    setHandsDetected(0)
+    onPointMoveRef.current?.(null, performance.now())
+    workerRef.current?.postMessage({ type: "reset" })
+  }, [resetSeq])
+
+  // ── Worker setup ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isStreaming) return
+
+    if (!workerRef.current) {
+      workerRef.current = new Worker(
+        new URL("../workers/gestureWorker.js", import.meta.url),
+        { type: "module" }
+      )
+
+      workerRef.current.onmessage = (event) => {
+        const data = event.data as WorkerUpdate | { type?: string }
+        if (data.type === "ready") {
+          setMpReady(true)
+          return
         }
-      } finally {
-        mpLoadingRef.current = false
+        if (data.type === "error") {
+          const err = data as { message?: string }
+          console.error("[GestureWorker] init error", err.message ?? "unknown")
+          setMpReady(false)
+          return
+        }
+        if (data.type === "stats") {
+          const stats = data as {
+            lastFrameMs?: number
+            lastHandsCount?: number
+            lastGesture?: GestureType
+            lastError?: string
+            initErrorMessage?: string
+          }
+          console.log("[GestureWorker] stats", stats)
+          return
+        }
+
+        if ((data as WorkerUpdate).rotationDelta !== undefined) {
+          const update = data as WorkerUpdate
+          inFlightRef.current = false
+
+          if (update.hands) {
+            lastHandsRef.current = update.hands
+          }
+
+          // Track fingertip and gesture for reticle / pinch-to-select
+          if (update.indexTip) indexTipRef.current = update.indexTip
+          currentGestureRef.current = update.gesture
+
+          const detected = update.handsDetected ?? update.hands?.length ?? 0
+          const nowMs = update.nowMs ?? performance.now()
+
+          // ── Point-mode tracking and pinch-to-select ───────────────────────
+          if (update.gesture === "POINT") {
+            lastPointMsRef.current = nowMs
+            lastPointActiveRef.current = true
+            if (pointHoldStartRef.current === null) {
+              pointHoldStartRef.current = nowMs
+              pointHoldFiredRef.current = false
+            } else if (!pointHoldFiredRef.current && nowMs - pointHoldStartRef.current >= POINT_HOLD_TOGGLE_MS) {
+              pointHoldFiredRef.current = true
+              onPointHoldToggleRef.current?.()
+            }
+            if (indexTipRef.current) {
+              onPointMoveRef.current?.(indexTipRef.current, nowMs)
+            }
+          } else if (update.gesture === "PINCH") {
+            const inPointWindow = nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS
+            if (inPointWindow && indexTipRef.current) {
+              onPinchSelectRef.current?.(indexTipRef.current.x, indexTipRef.current.y)
+              lastPointMsRef.current = 0  // prevent re-fire
+            }
+          } else if (lastPointActiveRef.current) {
+            lastPointActiveRef.current = false
+            onPointMoveRef.current?.(null, nowMs)
+            pointHoldStartRef.current = null
+            pointHoldFiredRef.current = false
+          }
+
+          if (
+            nowMs - lastUiUpdateRef.current >= UI_UPDATE_MS &&
+            (displayedGestureRef.current !== update.gesture || displayedHandsRef.current !== detected)
+          ) {
+            lastUiUpdateRef.current = nowMs
+            displayedGestureRef.current = update.gesture
+            displayedHandsRef.current = detected
+            setHandsDetected(detected)
+            setCurrentGesture(update.gesture)
+          }
+
+          // Suppress rotation while in point-mode window so PINCH means "select" not "rotate"
+          const inPointWindow = nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS
+          onGestureUpdateRef.current?.(
+            inPointWindow ? 0 : update.rotationDelta,
+            update.scaleDelta,
+            update.gesture,
+            nowMs
+          )
+        }
+      }
+
+      workerRef.current.onerror = () => {
+        console.error("[GestureWorker] worker error")
+        setMpReady(false)
       }
     }
 
-    load()
+    workerRef.current.postMessage({
+      type: "init",
+      wasmUrl: MP_WASM_URL,
+      modelUrl: MP_MODEL_URL,
+    })
+
     return () => {
-      cancelled = true
-      landmarkerRef.current?.close()
-      landmarkerRef.current = null
+      workerRef.current?.terminate()
+      workerRef.current = null
       setMpReady(false)
+      inFlightRef.current = false
     }
   }, [isStreaming])
 
@@ -111,15 +252,6 @@ export function CameraPanel({
     (ctx: CanvasRenderingContext2D, hands: DetectedHand[]) => {
       const { width, height } = ctx.canvas
       ctx.clearRect(0, 0, width, height)
-
-      const CONNECTIONS: [number, number][] = [
-        [0,1],[1,2],[2,3],[3,4],
-        [0,5],[5,6],[6,7],[7,8],
-        [0,9],[9,10],[10,11],[11,12],
-        [0,13],[13,14],[14,15],[15,16],
-        [0,17],[17,18],[18,19],[19,20],
-        [5,9],[9,13],[13,17],
-      ]
 
       for (const hand of hands) {
         const color = hand.handedness === "Left" ? "#00ffff" : "#00ff88"
@@ -142,7 +274,7 @@ export function CameraPanel({
           ctx.arc(lm.x * width, lm.y * height, r, 0, Math.PI * 2)
           ctx.fillStyle = color
           ctx.fill()
-          if ([4, 8, 12, 16, 20].includes(i)) {
+          if (TIP_INDICES.includes(i)) {
             ctx.beginPath()
             ctx.arc(lm.x * width, lm.y * height, 8, 0, Math.PI * 2)
             ctx.strokeStyle = color
@@ -156,6 +288,20 @@ export function CameraPanel({
         ctx.fillStyle = color
         ctx.shadowBlur = 4
         ctx.fillText(`${hand.handedness}`, wrist.x * width - 20, wrist.y * height + 30)
+
+        // Reticle: crosshair at index fingertip when pointing
+        if (currentGestureRef.current === "POINT" && hand.landmarks[8]) {
+          const lm = hand.landmarks[8]
+          const rx = lm.x * width
+          const ry = lm.y * height
+          ctx.strokeStyle = "#ffff00"
+          ctx.lineWidth   = 2
+          ctx.shadowColor = "#ffff00"
+          ctx.shadowBlur  = 12
+          ctx.beginPath(); ctx.moveTo(rx - 18, ry); ctx.lineTo(rx + 18, ry); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(rx, ry - 18); ctx.lineTo(rx, ry + 18); ctx.stroke()
+          ctx.beginPath(); ctx.arc(rx, ry, 9, 0, Math.PI * 2); ctx.stroke()
+        }
       }
 
       ctx.shadowBlur = 0
@@ -192,49 +338,53 @@ export function CameraPanel({
         canvas.height = vh
       }
 
-      let hands: DetectedHand[] = []
+      const hands = lastHandsRef.current
       const nowMs = performance.now()
 
-      const hl = landmarkerRef.current
-      if (hl && video.readyState >= 2 && video.videoWidth > 0) {
-        // Real MediaPipe detection
-        if (nowMs > lastDetectMsRef.current) {
-          try {
-            const result = hl.detectForVideo(video, nowMs)
-            lastDetectMsRef.current = nowMs + 0.001  // ensure monotonic
-            if (result.landmarks?.length > 0) {
-              hands = result.landmarks.map((lmList, i) => ({
-                landmarks:  lmList.map((lm) => ({ x: lm.x, y: lm.y, z: lm.z })),
-                handedness: (result.handedness[i]?.[0]?.categoryName === "Left"
-                  ? "Left"
-                  : "Right") as "Left" | "Right",
-              }))
-            }
-          } catch {
-            // Occasionally fails on frame boundaries — ignore
-          }
-        }
+      const videoTime = video.currentTime
+      const isNewFrame = videoTime !== lastVideoTimeRef.current
+      const canSend =
+        !!workerRef.current &&
+        mpReady &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        !inFlightRef.current &&
+        nowMs - lastSendMsRef.current >= MP_DETECT_INTERVAL_MS &&
+        isNewFrame
+
+      if (canSend) {
+        inFlightRef.current = true
+        lastSendMsRef.current = nowMs
+        lastVideoTimeRef.current = videoTime
+        createImageBitmap(video)
+          .then((bitmap) => {
+            workerRef.current?.postMessage({ type: "frame", bitmap, nowMs }, [bitmap])
+          })
+          .catch(() => {
+            inFlightRef.current = false
+          })
       }
-
-      const primaryLandmarks = hands[0]?.landmarks ?? []
-      const gesture = classifyGesture(primaryLandmarks)
-
-      if (
-        nowMs - lastUiUpdateRef.current >= UI_UPDATE_MS &&
-        (displayedGestureRef.current !== gesture || displayedHandsRef.current !== hands.length)
-      ) {
-        lastUiUpdateRef.current = nowMs
-        displayedGestureRef.current = gesture
-        displayedHandsRef.current = hands.length
-        setHandsDetected(hands.length)
-        setCurrentGesture(gesture)
-      }
-
-      // Always notify parent — empty landmarks signals hand loss
-      onFrameData?.(primaryLandmarks, gesture, nowMs)
 
       drawLandmarks(ctx, hands)
       schedule()
+    }
+
+    if (!debugIntervalRef.current) {
+      debugIntervalRef.current = window.setInterval(() => {
+        const nowMs = performance.now()
+        const videoTime = video.currentTime
+        const isNewFrame = videoTime !== lastVideoTimeRef.current
+        console.log("[GestureMain] stats", {
+          mpReady,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          inFlight: inFlightRef.current,
+          lastSendMs: lastSendMsRef.current,
+          deltaSinceSend: Math.round(nowMs - lastSendMsRef.current),
+          isNewFrame,
+        })
+      }, 2000)
     }
 
     schedule()
@@ -244,8 +394,12 @@ export function CameraPanel({
       if (videoFrameCallbackRef.current && video.cancelVideoFrameCallback) {
         video.cancelVideoFrameCallback(videoFrameCallbackRef.current)
       }
+      if (debugIntervalRef.current) {
+        clearInterval(debugIntervalRef.current)
+        debugIntervalRef.current = null
+      }
     }
-  }, [isStreaming, onFrameData, drawLandmarks])
+  }, [isStreaming, drawLandmarks, mpReady])
 
   // ── Camera start / stop ───────────────────────────────────────────────────────
   const startCamera = async () => {
@@ -275,8 +429,6 @@ export function CameraPanel({
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
-    landmarkerRef.current?.close()
-    landmarkerRef.current = null
     setIsStreaming(false)
     setHandsDetected(0)
     setCurrentGesture("NONE")
@@ -285,6 +437,11 @@ export function CameraPanel({
     lastUiUpdateRef.current = 0
     setMpReady(false)
     setCameraError(null)
+    lastHandsRef.current = []
+    lastSendMsRef.current = 0
+    lastVideoTimeRef.current = -1
+    inFlightRef.current = false
+    workerRef.current?.postMessage({ type: "reset" })
   }
 
   // ── Gesture labels ────────────────────────────────────────────────────────────
@@ -292,7 +449,8 @@ export function CameraPanel({
     PINCH:     "Pinch — Rotate",
     OPEN_PALM: "Open Palm — Zoom",
     FIST:      "Fist — Freeze (hold)",
-    POINT:     "Point — Navigate",
+    POINT:     "Point — Reticle",
+    V_SIGN:    "V-Sign — Reset",
     NONE:      "No Gesture",
   }
 

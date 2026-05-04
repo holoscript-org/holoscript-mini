@@ -1,59 +1,371 @@
 {
-  "name": "Human Heart",
-  "camera": { "position": [0, 2, 12], "target": [0, 0, 0], "fov": 45 },
+  "name": "A visual representation of the human heart, including its major components and structure",
+  "camera": {
+    "position": [
+      2.575,
+      5.950000000000001,
+      10.125
+    ],
+    "target": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "fov": 60.0
+  },
   "lights": [
-    { "type": "ambient",     "intensity": 0.5,  "color": "#ffffff" },
-    { "type": "directional", "intensity": 1.2,  "color": "#ffffff", "position": [5, 8, 5],   "castShadow": true },
-    { "type": "directional", "intensity": 0.4,  "color": "#ffcccc", "position": [-5, 3, -5] }
+    {
+      "type": "ambient",
+      "color": "#ffffff",
+      "intensity": 0.21,
+      "castShadow": false
+    },
+    {
+      "type": "directional",
+      "color": "#ffffff",
+      "intensity": 1.35,
+      "position": [
+        8.0,
+        10.0,
+        8.0
+      ],
+      "castShadow": true
+    },
+    {
+      "type": "point",
+      "color": "#ddeeff",
+      "intensity": 1.067,
+      "position": [
+        0.0,
+        2.0,
+        0.0
+      ],
+      "castShadow": false
+    }
   ],
   "objects": [
     {
-      "id": "left_ventricle", "type": "primitive",
-      "geometry": { "type": "sphere", "radius": 1.4 },
-      "position": [-0.8, -1.2, 0.2], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#b81414", "roughness": 0.6, "metalness": 0.1 },
-      "label": "Left Ventricle",
-      "animation": { "type": "none" }
+      "id": "ventricle",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.9
+      },
+      "position": [
+        1.7709186470186187,
+        -0.8250000000000001,
+        0.32225323216648355
+      ],
+      "scale": [
+        1.8,
+        1.8,
+        1.8
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#87ceeb",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Ventricle"
     },
     {
-      "id": "right_ventricle", "type": "primitive",
-      "geometry": { "type": "sphere", "radius": 1.1 },
-      "position": [0.9, -0.9, 0.4], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#7219a0", "roughness": 0.6, "metalness": 0.1 },
-      "label": "Right Ventricle",
-      "animation": { "type": "none" }
+      "id": "aortic_valve",
+      "type": "primitive",
+      "geometry": {
+        "type": "ring",
+        "innerRadius": 0.87,
+        "outerRadius": 0.9299999999999999,
+        "thetaSegments": 64
+      },
+      "position": [
+        -1.8512696061732312,
+        -0.275,
+        0.8082084169687975
+      ],
+      "scale": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#6495ed",
+        "roughness": 0.428,
+        "metalness": 0.0,
+        "opacity": 0.6,
+        "transparent": true,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Aortic Valve",
+      "parent": "ventricle"
     },
     {
-      "id": "left_atrium", "type": "primitive",
-      "geometry": { "type": "sphere", "radius": 0.9 },
-      "position": [-0.6, 1.0, -0.3], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#cc3333", "roughness": 0.5, "metalness": 0.1 },
-      "label": "Left Atrium",
-      "animation": { "type": "none" }
+      "id": "arteries_and_veins",
+      "type": "primitive",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.3,
+        "height": 1.0
+      },
+      "position": [
+        0.5270943284070236,
+        0.275,
+        -2.1771016441501185
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#f2c464",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Arteries And Veins"
     },
     {
-      "id": "right_atrium", "type": "primitive",
-      "geometry": { "type": "sphere", "radius": 0.85 },
-      "position": [0.7, 0.9, -0.1], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#8833bb", "roughness": 0.5, "metalness": 0.1 },
-      "label": "Right Atrium",
-      "animation": { "type": "none" }
+      "id": "atrial_septum",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.4
+      },
+      "position": [
+        1.377001036627121,
+        0.8250000000000001,
+        2.0384965403767143
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#b5b6ba",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Atrial Septum"
     },
     {
-      "id": "aorta", "type": "primitive",
-      "geometry": { "type": "cylinder", "radius": 0.35, "from": [-0.3, 1.0, 0.0], "to": [-0.3, 3.4, 0.0] },
-      "position": [0, 0, 0], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#cc2222", "roughness": 0.4, "metalness": 0.15 },
-      "label": "Aorta",
-      "animation": { "type": "none" }
+      "id": "atrium",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.75
+      },
+      "position": [
+        -2.6238425369760203,
+        -0.8250000000000001,
+        -0.5457566684478009
+      ],
+      "scale": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#f2c464",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Atrium"
     },
     {
-      "id": "pulmonary_artery", "type": "primitive",
-      "geometry": { "type": "cylinder", "radius": 0.28, "from": [0.5, 0.8, 0.3], "to": [0.5, 3.0, 0.5] },
-      "position": [0, 0, 0], "scale": [1, 1, 1],
-      "material": { "type": "standard", "color": "#5522aa", "roughness": 0.4, "metalness": 0.15 },
-      "label": "Pulmonary Artery",
-      "animation": { "type": "none" }
+      "id": "coronary_artery",
+      "type": "primitive",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.06,
+        "height": 0.2
+      },
+      "position": [
+        2.7467443586484337,
+        -0.275,
+        -0.9302663211322912
+      ],
+      "scale": [
+        0.2,
+        0.2,
+        0.2
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#c0c0c0",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Coronary Artery"
+    },
+    {
+      "id": "mitral_valve",
+      "type": "primitive",
+      "geometry": {
+        "type": "ring",
+        "innerRadius": 0.87,
+        "outerRadius": 0.9299999999999999,
+        "thetaSegments": 64
+      },
+      "position": [
+        -1.1648372704074432,
+        0.275,
+        2.894400479109575
+      ],
+      "scale": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#6495ed",
+        "roughness": 0.428,
+        "metalness": 0.0,
+        "opacity": 0.6,
+        "transparent": true,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Mitral Valve",
+      "parent": "ventricle"
+    },
+    {
+      "id": "pulmonary_valve",
+      "type": "primitive",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.09,
+        "height": 0.3
+      },
+      "position": [
+        -0.5947282676744728,
+        0.8250000000000001,
+        -3.2866241476063123
+      ],
+      "scale": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#6495ed",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Pulmonary Valve",
+      "parent": "ventricle"
+    },
+    {
+      "id": "tricuspid_valve",
+      "type": "primitive",
+      "geometry": {
+        "type": "ring",
+        "innerRadius": 0.87,
+        "outerRadius": 0.9299999999999999,
+        "thetaSegments": 64
+      },
+      "position": [
+        2.6285881707330114,
+        -0.8250000000000001,
+        2.400859060561965
+      ],
+      "scale": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#6495ed",
+        "roughness": 0.428,
+        "metalness": 0.0,
+        "opacity": 0.6,
+        "transparent": true,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Tricuspid Valve",
+      "parent": "ventricle"
+    },
+    {
+      "id": "ventricular_septum",
+      "type": "primitive",
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.4
+      },
+      "position": [
+        -3.695786991830046,
+        -0.275,
+        0.7934472326625279
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#b5b6ba",
+        "roughness": 0.428,
+        "metalness": 0.212,
+        "opacity": 1.0,
+        "transparent": false,
+        "emissiveIntensity": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "label": "Ventricular Septum"
     }
   ]
 }
