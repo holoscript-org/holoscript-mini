@@ -15,8 +15,31 @@ _MESHES = _ROOT / "core" / "assets" / "meshes"
 _KB = Path(__file__).parent / "knowledge_base"
 _ASSETS = _KB / "assets"
 
+LIVE_SEARCH_MAX_PER_CONCEPT = 1
+LIVE_SEARCH_MIN_UNIQUE = 2
+
 with (_KB / "concept_map.json").open(encoding="utf-8") as f:
 	CONCEPT_MAP: dict[str, dict[str, Any]] = json.load(f)
+
+
+def _load_sidecar_index() -> dict[str, dict[str, Any]]:
+	index: dict[str, dict[str, Any]] = {}
+	if not _ASSETS.exists():
+		return index
+	for path in _ASSETS.glob("*.json"):
+		try:
+			data = json.loads(path.read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		if not isinstance(data, dict):
+			continue
+		tags = data.get("tags")
+		if not isinstance(tags, list):
+			continue
+		for tag in tags:
+			if isinstance(tag, str) and tag.strip():
+				index[tag.lower().strip()] = data
+	return index
 
 
 def _load_sidecar(asset_id: str | None) -> dict[str, Any] | None:
@@ -47,19 +70,45 @@ def _glb_on_disk(src: str | None) -> bool:
 	return (_ROOT / "core" / "assets" / "meshes" / rel).exists()
 
 
+def _needs_live_search(object_concepts: list[str], assets: list[dict[str, Any]]) -> bool:
+	if not object_concepts:
+		return False
+	with_asset = [item for item in assets if item.get("asset_src")]
+	if not with_asset:
+		return True
+	unique_assets = {item.get("asset_id") for item in with_asset if item.get("asset_id")}
+	if len(object_concepts) > 1 and len(unique_assets) < min(len(object_concepts), LIVE_SEARCH_MIN_UNIQUE):
+		return True
+	return False
+
+
 def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 	"""intent = output of semantic_parser.parse_intent()"""
 	assets: list[dict[str, Any]] = []
 	generators: list[dict[str, Any]] = []
 	effects: list[dict[str, Any]] = []
+	missing_objects: list[dict[str, str]] = []
+	sidecar_index = _load_sidecar_index()
 
 	for concept in intent.get("objects", []):
 		entry = CONCEPT_MAP.get(concept, {})
 		asset_id = entry.get("asset_id")
 		asset_src = entry.get("asset_src", "")
 		sidecar = _load_sidecar(asset_id)
+		if not asset_src:
+			cached = sidecar_index.get(concept.lower().strip())
+			if isinstance(cached, dict):
+				asset_id = cached.get("id")
+				asset_src = cached.get("src", "")
+				sidecar = cached
 		if not _glb_on_disk(asset_src):
 			asset_src, asset_id = None, None
+			missing_objects.append(
+				{
+					"concept": concept,
+					"category": entry.get("category") or "abstract",
+				}
+			)
 		assets.append(
 			{
 				"concept": concept,
@@ -110,5 +159,34 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		effects.append(
 			{"concept": concept, "handler": entry.get("handler", "anim_orbit")}
 		)
+
+	if _needs_live_search(intent.get("objects", []), assets):
+		try:
+			from pipeline.live_search import fetch_live_assets
+
+			candidates = missing_objects or [
+				{"concept": concept, "category": CONCEPT_MAP.get(concept, {}).get("category") or "abstract"}
+				for concept in intent.get("objects", [])
+			]
+			live_results = fetch_live_assets(
+				candidates,
+				max_per_concept=LIVE_SEARCH_MAX_PER_CONCEPT,
+			)
+			for result in live_results:
+				sidecar = result.get("sidecar")
+				if not isinstance(sidecar, dict):
+					continue
+				assets.append(
+					{
+						"concept": result.get("concept") or sidecar.get("category") or "live",
+						"asset_id": sidecar.get("id"),
+						"asset_src": sidecar.get("src"),
+						"sidecar": sidecar,
+						"category": sidecar.get("category", "abstract"),
+						"is_generator": False,
+					}
+				)
+		except Exception:
+			pass
 
 	return {"assets": assets, "generators": generators, "effects": effects}
