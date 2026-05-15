@@ -82,6 +82,40 @@ def _needs_live_search(object_concepts: list[str], assets: list[dict[str, Any]])
 	return False
 
 
+def _asset_metadata(sidecar: dict[str, Any] | None) -> dict[str, Any]:
+	if not isinstance(sidecar, dict):
+		return {}
+	meta: dict[str, Any] = {}
+	if isinstance(sidecar.get("author"), str) and sidecar["author"].strip():
+		meta["author"] = sidecar["author"].strip()
+	if isinstance(sidecar.get("license"), str) and sidecar["license"].strip():
+		meta["license"] = sidecar["license"].strip()
+	return meta
+
+
+def _score_asset(concept: str, category: str | None, sidecar: dict[str, Any] | None, asset_src: str | None) -> float:
+	if not asset_src:
+		return 0.1
+	concept_l = concept.lower().strip()
+	category_l = (category or "").lower().strip()
+	tags = sidecar.get("tags") if isinstance(sidecar, dict) else None
+	matched_tags = 0
+	if isinstance(tags, list):
+		matched_tags = sum(
+			1 for tag in tags if isinstance(tag, str) and concept_l == tag.lower().strip()
+		)
+	meta = _asset_metadata(sidecar)
+	meta_score = 0.0
+	if meta.get("author"):
+		meta_score += 0.05
+	if meta.get("license"):
+		meta_score += 0.05
+	cat_score = 0.1 if category_l else 0.0
+	tag_score = 0.3 if matched_tags > 0 else 0.0
+	base = 0.45
+	return round(min(1.0, base + tag_score + cat_score + meta_score), 3)
+
+
 def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 	"""intent = output of semantic_parser.parse_intent()"""
 	assets: list[dict[str, Any]] = []
@@ -95,12 +129,14 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		asset_id = entry.get("asset_id")
 		asset_src = entry.get("asset_src", "")
 		sidecar = _load_sidecar(asset_id)
+		source = "kb" if asset_src else None
 		if not asset_src:
 			cached = sidecar_index.get(concept.lower().strip())
 			if isinstance(cached, dict):
 				asset_id = cached.get("id")
 				asset_src = cached.get("src", "")
 				sidecar = cached
+				source = "kb"
 		if not _glb_on_disk(asset_src):
 			asset_src, asset_id = None, None
 			missing_objects.append(
@@ -109,14 +145,22 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 					"category": entry.get("category") or "abstract",
 				}
 			)
+			source = None
+		category = entry.get("category", "abstract")
+		confidence = _score_asset(concept, category, sidecar, asset_src)
+		meta = _asset_metadata(sidecar)
 		assets.append(
 			{
 				"concept": concept,
 				"asset_id": asset_id,
 				"asset_src": asset_src,
 				"sidecar": sidecar,
-				"category": entry.get("category", "abstract"),
+				"category": category,
 				"is_generator": False,
+				**({"confidence": confidence} if confidence else {}),
+				**({"source": source} if source else {}),
+				**({"tags": sidecar.get("tags")} if isinstance(sidecar, dict) and isinstance(sidecar.get("tags"), list) and sidecar.get("tags") else {}),
+				**({"metadata": meta} if meta else {}),
 			}
 		)
 
@@ -176,17 +220,26 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 				sidecar = result.get("sidecar")
 				if not isinstance(sidecar, dict):
 					continue
+				category = sidecar.get("category", "abstract")
+				concept = result.get("concept") or category or "live"
+				confidence = _score_asset(concept, category, sidecar, sidecar.get("src"))
+				meta = _asset_metadata(sidecar)
 				assets.append(
 					{
-						"concept": result.get("concept") or sidecar.get("category") or "live",
+						"concept": concept,
 						"asset_id": sidecar.get("id"),
 						"asset_src": sidecar.get("src"),
 						"sidecar": sidecar,
-						"category": sidecar.get("category", "abstract"),
+						"category": category,
 						"is_generator": False,
+						**({"confidence": confidence} if confidence else {}),
+						"source": "live",
+						**({"tags": sidecar.get("tags")} if isinstance(sidecar.get("tags"), list) and sidecar.get("tags") else {}),
+						**({"metadata": meta} if meta else {}),
 					}
 				)
 		except Exception:
 			pass
 
+	assets.sort(key=lambda item: float(item.get("confidence", 0)), reverse=True)
 	return {"assets": assets, "generators": generators, "effects": effects}
