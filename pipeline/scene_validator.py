@@ -82,24 +82,25 @@ def _validate_material(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
 	if errors:
 		return None, errors
 
-	return (
-		{
-			"type": "standard",
-			"color": raw["color"],
-			"roughness": raw["roughness"],
-			"metalness": raw["metalness"],
-			"opacity": raw.get("opacity"),
-			"transparent": raw.get("transparent"),
-			"map": raw.get("map"),
-			"normalMap": raw.get("normalMap"),
-			"roughnessMap": raw.get("roughnessMap"),
-			"metalnessMap": raw.get("metalnessMap"),
-			"emissive": raw.get("emissive"),
-			"emissiveMap": raw.get("emissiveMap"),
-			"emissiveIntensity": raw.get("emissiveIntensity"),
-		},
-		[],
-	)
+	mat = {
+		"type": "standard",
+		"color": raw["color"],
+		"roughness": raw["roughness"],
+		"metalness": raw["metalness"],
+	}
+	optional = {
+		"opacity": raw.get("opacity"),
+		"transparent": raw.get("transparent"),
+		"map": raw.get("map"),
+		"normalMap": raw.get("normalMap"),
+		"roughnessMap": raw.get("roughnessMap"),
+		"metalnessMap": raw.get("metalnessMap"),
+		"emissive": raw.get("emissive"),
+		"emissiveMap": raw.get("emissiveMap"),
+		"emissiveIntensity": raw.get("emissiveIntensity"),
+	}
+	mat.update({k: v for k, v in optional.items() if v is not None})
+	return mat, []
 
 
 def _validate_geometry(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
@@ -149,23 +150,22 @@ def _validate_geometry(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
 	if errors:
 		return None, errors
 
-	return (
-		{
-			"type": t,
-			"radius": raw.get("radius"),
-			"length": raw.get("length"),
-			"tube": raw.get("tube"),
-			"innerRadius": raw.get("innerRadius"),
-			"outerRadius": raw.get("outerRadius"),
-			"thetaSegments": raw.get("thetaSegments"),
-			"width": raw.get("width"),
-			"height": raw.get("height"),
-			"depth": raw.get("depth"),
-			"from": raw.get("from"),
-			"to": raw.get("to"),
-		},
-		[],
-	)
+	geom = {"type": t}
+	optional = {
+		"radius": raw.get("radius"),
+		"length": raw.get("length"),
+		"tube": raw.get("tube"),
+		"innerRadius": raw.get("innerRadius"),
+		"outerRadius": raw.get("outerRadius"),
+		"thetaSegments": raw.get("thetaSegments"),
+		"width": raw.get("width"),
+		"height": raw.get("height"),
+		"depth": raw.get("depth"),
+		"from": raw.get("from"),
+		"to": raw.get("to"),
+	}
+	geom.update({k: v for k, v in optional.items() if v is not None})
+	return geom, []
 
 
 def _validate_animation(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
@@ -195,17 +195,16 @@ def _validate_animation(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
 	if errors:
 		return None, errors
 
-	return (
-		{
-			"type": t,
-			"center": raw.get("center"),
-			"center_ref": raw.get("center_ref"),
-			"axis": raw.get("axis"),
-			"speed": raw.get("speed"),
-			"phase": raw.get("phase"),
-		},
-		[],
-	)
+	anim = {"type": t}
+	optional = {
+		"center": raw.get("center"),
+		"center_ref": raw.get("center_ref"),
+		"axis": raw.get("axis"),
+		"speed": raw.get("speed"),
+		"phase": raw.get("phase"),
+	}
+	anim.update({k: v for k, v in optional.items() if v is not None})
+	return anim, []
 
 
 def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
@@ -261,24 +260,25 @@ def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
 	if not position_ok or mat is None or not type_ok:
 		return None, errors
 
-	return (
-		{
-			"id": raw["id"],
-			"type": obj_type,
-			"parent": raw["parent"]
-			if isinstance(raw.get("parent"), str) and raw["parent"].strip()
-			else None,
-			"geometry": geom,
-			"model": raw.get("model") if obj_type == "mesh" else None,
-			"position": raw["position"],
-			"rotation": raw["rotation"] if _is_vec3(raw.get("rotation")) else None,
-			"scale": raw["scale"] if _is_vec3(raw.get("scale")) else None,
-			"material": mat,
-			"label": raw["label"] if isinstance(raw.get("label"), str) else None,
-			"animation": anim or {"type": "none"},
-		},
-		errors,
-	)
+	obj = {
+		"id": raw["id"],
+		"type": obj_type,
+		"position": raw["position"],
+		"material": mat,
+		"animation": anim or {"type": "none"},
+	}
+	optional = {
+		"parent": raw["parent"]
+		if isinstance(raw.get("parent"), str) and raw["parent"].strip()
+		else None,
+		"geometry": geom if obj_type == "primitive" else None,
+		"model": raw.get("model") if obj_type == "mesh" else None,
+		"rotation": raw["rotation"] if _is_vec3(raw.get("rotation")) else None,
+		"scale": raw["scale"] if _is_vec3(raw.get("scale")) else None,
+		"label": raw["label"] if isinstance(raw.get("label"), str) else None,
+	}
+	obj.update({k: v for k, v in optional.items() if v is not None})
+	return obj, errors
 
 
 def _validate_parent_refs(objects: list[dict]) -> list[str]:
@@ -357,15 +357,17 @@ def validate_scene(raw: Any) -> dict:
 				if light.get("position") is not None and not _is_vec3(light["position"]):
 					all_errors.append(f"light({light['type']}): position must be [x,y,z]")
 					continue
-				valid_lights.append(
-					{
-						"type": light["type"],
-						"intensity": light["intensity"],
-						"color": light.get("color", "#ffffff"),
-						"position": light.get("position"),
-						"castShadow": light.get("castShadow", False),
-					}
-				)
+				light_obj = {
+					"type": light["type"],
+					"intensity": light["intensity"],
+					"color": light.get("color", "#ffffff"),
+				}
+				optional = {
+					"position": light.get("position"),
+					"castShadow": light.get("castShadow", False),
+				}
+				light_obj.update({k: v for k, v in optional.items() if v is not None})
+				valid_lights.append(light_obj)
 			if valid_lights:
 				lights = valid_lights
 
