@@ -23,6 +23,7 @@ from pipeline.fallback_engine import resolve_intent
 from pipeline.retrieval import retrieve
 from pipeline.scene_builder import build_scene
 from pipeline.llm_bridge import llm_generate_objects
+from pipeline.scene_enhancer import enhance_scene
 from pipeline.scene_validator import is_valid, validate_scene
 from pipeline.repair_loop import DEMO_FALLBACK, repair
 
@@ -72,6 +73,7 @@ def run_pipeline(transcript: str) -> dict:
 		}
 		if not scene["objects"]:
 			scene = DEMO_FALLBACK
+		components = {"assets": [], "generators": [], "effects": []}
 	else:
 		components = retrieve(resolved_intent)
 		scene = build_scene(components, resolved_intent)
@@ -85,6 +87,8 @@ def run_pipeline(transcript: str) -> dict:
 				extra = llm_generate_objects(concept)
 				if extra:
 					scene["objects"].extend(extra)
+
+	scene = enhance_scene(transcript, resolved_intent, components, scene)
 
 	vr = validate_scene(scene)
 	print(
@@ -103,6 +107,8 @@ def run_pipeline(transcript: str) -> dict:
 	if not final.get("objects"):
 		final = DEMO_FALLBACK
 
+	final = _strip_none(final)
+
 	OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 	OUTPUT_PATH.write_text(json.dumps(final, indent=2), encoding="utf-8")
 
@@ -112,6 +118,15 @@ def run_pipeline(transcript: str) -> dict:
 		f"    Scene: \"{final.get('name')}\" -- {len(final.get('objects', []))} objects -- {elapsed:.0f}ms total"
 	)
 	return final
+
+
+def _strip_none(value):
+	if isinstance(value, dict):
+		cleaned = {k: _strip_none(v) for k, v in value.items() if v is not None}
+		return {k: v for k, v in cleaned.items() if v is not None}
+	if isinstance(value, list):
+		return [_strip_none(v) for v in value if v is not None]
+	return value
 
 
 def run_with_voice() -> dict:
