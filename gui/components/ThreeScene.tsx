@@ -14,8 +14,9 @@
  */
 
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { Canvas, useFrame, useThree } from "@react-three/fiber"
+import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber"
 import { Environment, OrbitControls, PerspectiveCamera, Text, useGLTF, useTexture } from "@react-three/drei"
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js"
 import * as THREE from "three"
 import type { GestureControlRefs } from "@/hooks/useGestureControl"
 import {
@@ -182,7 +183,7 @@ function PrimitiveGeom({ geom, mat }: GeomProps) {
 
 // ─── GLTF mesh loader ─────────────────────────────────────────────────────────
 
-function MeshObject({ obj }: { obj: SceneObject }) {
+function GltfObject({ obj }: { obj: SceneObject }) {
   const { scene } = useGLTF(obj.model!)
   const clone = useMemo(() => scene.clone(true), [scene])
   const params = useMemo(() => buildMaterialParams(obj.material), [obj.material])
@@ -198,6 +199,33 @@ function MeshObject({ obj }: { obj: SceneObject }) {
   }, [clone, params])
 
   return <primitive object={clone} />
+}
+
+// ─── OBJ mesh loader ──────────────────────────────────────────────────────────
+
+function ObjObject({ obj }: { obj: SceneObject }) {
+  const group = useLoader(OBJLoader, obj.model!)
+  const clone = useMemo(() => group.clone(true), [group])
+  const params = useMemo(() => buildMaterialParams(obj.material), [obj.material])
+
+  useEffect(() => {
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        ;(child as THREE.Mesh).material = new THREE.MeshStandardMaterial(params)
+        ;(child as THREE.Mesh).castShadow = true
+        ;(child as THREE.Mesh).receiveShadow = true
+      }
+    })
+  }, [clone, params])
+
+  return <primitive object={clone} />
+}
+
+// ─── Unified mesh loader ──────────────────────────────────────────────────────
+
+function MeshObject({ obj }: { obj: SceneObject }) {
+  const isObj = obj.model!.toLowerCase().endsWith(".obj")
+  return isObj ? <ObjObject obj={obj} /> : <GltfObject obj={obj} />
 }
 
 // ─── Single scene object node ─────────────────────────────────────────────────
@@ -585,7 +613,9 @@ interface ThreeSceneProps {
   selectTrigger?: SelectTrigger | null
   reticlePoint?: { x: number; y: number } | null
   sceneDragMode?: boolean
+  isDragActiveRef?: React.MutableRefObject<boolean>
   resetSeq?: number
+  deselectSeq?: number
   onObjectSelect?: (id: string | null) => void
   onFpsUpdate?: (fps: number) => void
 }
@@ -599,7 +629,9 @@ export function ThreeScene({
   selectTrigger,
   reticlePoint,
   sceneDragMode = false,
+  isDragActiveRef,
   resetSeq = 0,
+  deselectSeq = 0,
   onObjectSelect,
   onFpsUpdate,
 }: ThreeSceneProps) {
@@ -690,6 +722,12 @@ export function ThreeScene({
     setSelectedId(null)
   }, [resetSeq])
 
+  // Drop gesture: deselect without touching camera or drag offsets
+  useEffect(() => {
+    if (deselectSeq === 0) return
+    setSelectedId(null)
+  }, [deselectSeq])
+
   if (!mounted) {
     return (
       <div className="w-full h-full flex items-center justify-center rounded-lg border border-primary/20 bg-black/30">
@@ -764,6 +802,7 @@ export function ThreeScene({
               sceneOffsetRef={sceneOffsetRef}
               sceneRootRef={sceneRootRef}
               sceneDragMode={sceneDragMode}
+              isDragActiveRef={isDragActiveRef}
             />
           </Canvas>
           </DragOffsetContext.Provider>
@@ -864,6 +903,7 @@ function DragController({
   sceneOffsetRef,
   sceneRootRef,
   sceneDragMode,
+  isDragActiveRef,
 }: {
   reticlePoint?: { x: number; y: number } | null
   selectedId: string | null
@@ -872,6 +912,7 @@ function DragController({
   sceneOffsetRef: React.MutableRefObject<THREE.Vector3>
   sceneRootRef: React.MutableRefObject<THREE.Group | null>
   sceneDragMode: boolean
+  isDragActiveRef?: React.MutableRefObject<boolean>
 }) {
   const { camera } = useThree()
   const raycaster = useRef(new THREE.Raycaster())
@@ -883,6 +924,13 @@ function DragController({
 
   useFrame(() => {
     if (!reticlePoint) {
+      dragModeRef.current = null
+      dragTargetRef.current = null
+      return
+    }
+
+    // Drag only fires when explicitly activated by a PINCH-while-pointing gesture
+    if (isDragActiveRef && !isDragActiveRef.current) {
       dragModeRef.current = null
       dragTargetRef.current = null
       return

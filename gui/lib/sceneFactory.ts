@@ -96,7 +96,7 @@ export interface SceneObject {
   parent?: string
   /** Required when type === "primitive" */
   geometry?: GeometryDef
-  /** Required when type === "mesh" — path to .glb/.gltf */
+  /** Required when type === "mesh" — path to .glb/.gltf/.obj */
   model?: string
   position: [number, number, number]
   rotation?: [number, number, number]   // Euler degrees [x, y, z]

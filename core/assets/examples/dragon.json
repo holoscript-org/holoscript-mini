@@ -1,0 +1,595 @@
+{
+    "name":  "Human + Planet + Satellite",
+    "objects":  [
+                    {
+                        "id":  "human",
+                        "type":  "mesh",
+                        "model":  "/assets/meshes/abstract/character-human.glb",
+                        "position":  [
+                                         6.56,
+                                         0.0,
+                                         0.0
+                                     ],
+                        "scale":  [
+                                      0.858,
+                                      0.858,
+                                      0.858
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "label":  "Human",
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "planet",
+                        "type":  "mesh",
+                        "model":  "/assets/meshes/planets/asteroid.glb",
+                        "position":  [
+                                         -2.55,
+                                         0.0,
+                                         4.42
+                                     ],
+                        "scale":  [
+                                      0.917,
+                                      0.917,
+                                      0.917
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "label":  "Planet",
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "satellite",
+                        "type":  "mesh",
+                        "model":  "/assets/meshes/satellites/asteroid.glb",
+                        "position":  [
+                                         -3.47,
+                                         0.0,
+                                         -6.02
+                                     ],
+                        "scale":  [
+                                      1.053,
+                                      1.053,
+                                      1.053
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "label":  "Satellite",
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_0",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -9.55,
+                                         0.0,
+                                         -0.83
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         223.3,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.385,
+                                      1.385,
+                                      1.385
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_1",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -6.05,
+                                         0.0,
+                                         -0.83
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         52.7,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.108,
+                                      1.108,
+                                      1.108
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_2",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -2.55,
+                                         0.0,
+                                         -0.83
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         7.9,
+                                         0
+                                     ],
+                        "scale":  [
+                                      0.963,
+                                      0.963,
+                                      0.963
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_3",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         0.95,
+                                         0.0,
+                                         -0.83
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         196.2,
+                                         0
+                                     ],
+                        "scale":  [
+                                      0.976,
+                                      0.976,
+                                      0.976
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_4",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -9.55,
+                                         0.0,
+                                         2.67
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         211.6,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.095,
+                                      1.095,
+                                      1.095
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_5",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -6.05,
+                                         0.0,
+                                         2.67
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         81.6,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.03,
+                                      1.03,
+                                      1.03
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_6",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -2.55,
+                                         0.0,
+                                         2.67
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         260.1,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.281,
+                                      1.281,
+                                      1.281
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_7",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         0.95,
+                                         0.0,
+                                         2.67
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         28.8,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.365,
+                                      1.365,
+                                      1.365
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_8",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -9.55,
+                                         0.0,
+                                         6.17
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         27.6,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.182,
+                                      1.182,
+                                      1.182
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    },
+                    {
+                        "id":  "city_9",
+                        "type":  "primitive",
+                        "geometry":  {
+                                         "type":  "box",
+                                         "width":  1.2,
+                                         "height":  3.0,
+                                         "depth":  1.2
+                                     },
+                        "position":  [
+                                         -6.05,
+                                         0.0,
+                                         6.17
+                                     ],
+                        "rotation":  [
+                                         0,
+                                         251.7,
+                                         0
+                                     ],
+                        "scale":  [
+                                      1.223,
+                                      1.223,
+                                      1.223
+                                  ],
+                        "material":  {
+                                         "type":  "standard",
+                                         "color":  "#888888",
+                                         "roughness":  0.6,
+                                         "metalness":  0.1
+                                     },
+                        "animation":  {
+                                          "type":  "orbit",
+                                          "center":  [
+                                                         0,
+                                                         0,
+                                                         0
+                                                     ],
+                                          "axis":  [
+                                                       0,
+                                                       1,
+                                                       0
+                                                   ],
+                                          "speed":  0.5
+                                      }
+                    }
+                ],
+    "lights":  [
+                   {
+                       "type":  "ambient",
+                       "intensity":  0.4,
+                       "color":  "#ffffff",
+                       "castShadow":  false
+                   },
+                   {
+                       "type":  "directional",
+                       "intensity":  1.2,
+                       "color":  "#ffffff",
+                       "position":  [
+                                        10,
+                                        10,
+                                        10
+                                    ],
+                       "castShadow":  true
+                   }
+               ],
+    "camera":  {
+                   "position":  [
+                                    -1.5,
+                                    8.05,
+                                    29.07
+                                ],
+                   "target":  [
+                                  -1.5,
+                                  0.0,
+                                  0.08
+                              ],
+                   "fov":  65
+               }
+}

@@ -79,7 +79,7 @@ const STATE_UPDATE_MS = 125
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useGestureControl() {
+export function useGestureControl(options?: { onVSignReset?: () => void }) {
   // ── Transform refs — updated every camera frame, no per-frame re-render ─────
   const rotYRef   = useRef(0)
   const scaleRef  = useRef(1)
@@ -90,6 +90,10 @@ export function useGestureControl() {
     () => ({ rotationYRef: rotYRef, scaleRef, frozenRef }),
     []
   )
+
+  // ── V-sign full-reset callback ────────────────────────────────────────────
+  const onVSignResetRef = useRef(options?.onVSignReset)
+  onVSignResetRef.current = options?.onVSignReset
 
   // ── Freeze toggle refs ────────────────────────────────────────────────────
   const fistStartRef = useRef<number | null>(null)
@@ -146,6 +150,7 @@ export function useGestureControl() {
       if (gesture === "V_SIGN") {
         if (!vSignFiredRef.current) {
           vSignFiredRef.current = true
+          // Local ref reset (immediate, no re-render needed)
           rotYRef.current = 0
           scaleRef.current = 1
           frozenRef.current = false
@@ -153,6 +158,8 @@ export function useGestureControl() {
           targetScaleRef.current = 1
           fistStartRef.current = null
           fistFiredRef.current = false
+          // Full page reset — restores camera, drag offsets, selection, etc.
+          onVSignResetRef.current?.()
         }
       } else {
         vSignFiredRef.current = false

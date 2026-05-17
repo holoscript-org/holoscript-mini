@@ -22,8 +22,18 @@ export default function HologramDashboard() {
     setSelectedScene,
   } = useWebGLSceneData()
 
+  // ── Drag-active ref — true only while PINCH is held after a selection exists ─
+  const isDragActiveRef = useRef(false)
+  // ── Track selected object id and scene-drag mode for use in callbacks ─────
+  const selectedIdRef = useRef<string | null>(null)
+  const sceneDragModeRef = useRef(false)
+
+  // handleReset ref — allows useGestureControl to call it before it is defined
+  const handleResetRef = useRef<() => void>(() => {})
+  const onVSignReset = useCallback(() => handleResetRef.current(), [])
+
   // ── Browser-side gesture transforms ──────────────────────────────────────────
-  const { state: gestureState, controls: gestureControls, applyWorkerUpdate, reset, setScale } = useGestureControl()
+  const { state: gestureState, controls: gestureControls, applyWorkerUpdate, reset, setScale } = useGestureControl({ onVSignReset })
 
   // ── Three.js FPS (passed up from ThreeScene → shown in PerformanceLogs) ──────
   const [threeFps, setThreeFps] = useState(0)
@@ -35,9 +45,43 @@ export default function HologramDashboard() {
   const lastReticleMsRef = useRef(0)
   const [sceneDragMode, setSceneDragMode] = useState(false)
   const [resetSeq, setResetSeq] = useState(0)
+  const [deselectSeq, setDeselectSeq] = useState(0)
 
+  // Keep refs in sync for use inside callbacks without stale closure issues
+  sceneDragModeRef.current = sceneDragMode
+
+  // Gesture flow:
+  //   POINT (no selection)     → reticle only
+  //   PINCH in point window    → select object under cursor          (onPinchSelect fires BEFORE onGestureUpdate)
+  //   POINT (with selection)   → drag: object follows reticle
+  //   PINCH while dragging     → drop + deselect                    (isDragActiveRef still true when handler fires)
+  const handleGestureUpdate = useCallback(
+    (rotDelta: number, scaleDelta: number, gesture: import("@/hooks/useGestureControl").GestureType, nowMs: number) => {
+      applyWorkerUpdate(rotDelta, scaleDelta, gesture, nowMs)
+      // POINT while something is targeted → activate drag
+      if (gesture === "POINT" && (selectedIdRef.current !== null || sceneDragModeRef.current)) {
+        isDragActiveRef.current = true
+      } else if (gesture !== "POINT") {
+        // Any non-POINT gesture stops drag (drop fires via handlePinchSelect first)
+        isDragActiveRef.current = false
+      }
+    },
+    [applyWorkerUpdate]
+  )
+
+  // Fires BEFORE handleGestureUpdate for the same frame (camera-panel ordering).
+  // PINCH in point window while dragging → DROP.
+  // PINCH in point window while not dragging → SELECT.
   const handlePinchSelect = useCallback((x: number, y: number) => {
-    setSelectTrigger({ x, y, seq: ++selectSeqRef.current })
+    if (isDragActiveRef.current) {
+      // Drop: stop drag and deselect so user can re-target next
+      isDragActiveRef.current = false
+      selectedIdRef.current = null
+      setDeselectSeq((prev) => prev + 1)
+    } else {
+      // Nothing being dragged → run selection raycast
+      setSelectTrigger({ x, y, seq: ++selectSeqRef.current })
+    }
   }, [])
 
   const handlePointMove = useCallback((point: { x: number; y: number } | null, nowMs: number) => {
@@ -52,15 +96,22 @@ export default function HologramDashboard() {
 
   const handleReset = useCallback(() => {
     reset()
+    isDragActiveRef.current = false
+    selectedIdRef.current = null
     setSceneDragMode(false)
     setReticlePoint(null)
     setSelectTrigger(null)
     setResetSeq((prev) => prev + 1)
+    // resetSeq already clears selectedId inside ThreeScene; no need to bump deselectSeq
   }, [reset])
 
+  // Keep the ref pointing at the latest handleReset so V_SIGN can call it
+  handleResetRef.current = handleReset
+
   const handleObjectSelect = useCallback((id: string | null) => {
-    // Selection state is managed inside ThreeScene; log here for debugging
-    if (id) console.log("[Selection]", id)
+    selectedIdRef.current = id
+    // If deselected, stop any active drag
+    if (!id) isDragActiveRef.current = false
   }, [])
 
   // ── Zoom sync: POV wheel/buttons feed back into gesture scale ────────────────
@@ -168,7 +219,9 @@ export default function HologramDashboard() {
             selectTrigger={selectTrigger}
             reticlePoint={reticlePoint}
             sceneDragMode={sceneDragMode}
+            isDragActiveRef={isDragActiveRef}
             resetSeq={resetSeq}
+            deselectSeq={deselectSeq}
             onObjectSelect={handleObjectSelect}
             onFpsUpdate={setThreeFps}
           />
@@ -189,7 +242,7 @@ export default function HologramDashboard() {
             </div>
             <div className="min-h-0">
               <CameraPanel
-                onGestureUpdate={applyWorkerUpdate}
+                onGestureUpdate={handleGestureUpdate}
                 onPinchSelect={handlePinchSelect}
                 onPointMove={handlePointMove}
                 onPointHoldToggle={handlePointHoldToggle}
