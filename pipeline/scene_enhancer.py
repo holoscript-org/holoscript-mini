@@ -10,12 +10,8 @@ import json
 import os
 from typing import Any
 
-import requests
-
+from llm.groq_client import generate_raw
 from pipeline.scene_validator import DEFAULT_CAMERA, DEFAULT_LIGHTS, validate_scene
-
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 SYSTEM_PROMPT = """
 You are a scene enhancer. Output ONLY a JSON object that conforms to the scene schema.
@@ -50,7 +46,7 @@ def enhance_scene(
         return _strip_none(base_scene)
 
     prompt = _build_prompt(transcript, intent, components, base_scene)
-    raw = _call_groq(prompt, key)
+    raw = generate_raw(prompt, SYSTEM_PROMPT)
     if not raw:
         return _strip_none(base_scene)
 
@@ -89,28 +85,6 @@ def _build_prompt(
         "base_scene": base_scene,
     }
     return f"{SYSTEM_PROMPT}\n\nINPUT:\n{json.dumps(payload, indent=2)}\n\nOUTPUT:\n"
-
-
-def _call_groq(prompt: str, key: str) -> str | None:
-    try:
-        resp = requests.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={
-                "model": GROQ_MODEL,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 2000,
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-    except Exception:
-        return None
 
 
 def _parse_json_object(raw: str) -> dict[str, Any] | None:

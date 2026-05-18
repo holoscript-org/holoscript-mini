@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 
 SYSTEM_PROMPT = """\
 You are a strict 3D object generator. Output ONLY a raw JSON array. No markdown.
@@ -23,47 +22,17 @@ Rules (every rule is non-negotiable):
 
 def llm_generate_objects(description: str) -> list[dict] | None:
 	prompt = f"Generate 3D objects for: {description}\nOutput only the JSON array."
-	raw = _try_groq(prompt) or _try_ollama(prompt)
+	raw = _try_groq(prompt)
 	return _parse_array(raw) if raw else None
 
 
 def _try_groq(prompt: str) -> str | None:
 	try:
-		import requests
+		from llm.groq_client import generate_raw
 
-		key = os.getenv("GROQ_API_KEY")
-		if not key:
-			return None
-		resp = requests.post(
-			"https://api.groq.com/openai/v1/chat/completions",
-			headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-			json={
-				"model": "llama-3.1-8b-instant",
-				"messages": [
-					{"role": "system", "content": SYSTEM_PROMPT},
-					{"role": "user", "content": prompt},
-				],
-				"temperature": 0.2,
-				"max_tokens": 1500,
-			},
-			timeout=15,
-		)
-		resp.raise_for_status()
-		return resp.json()["choices"][0]["message"]["content"]
+		return generate_raw(prompt, SYSTEM_PROMPT)
 	except Exception:
 		return None
-
-
-def _try_ollama(prompt: str) -> str | None:
-	try:
-		from llm.ollama_client import generate_scene_ollama
-
-		result = generate_scene_ollama(prompt, None)
-		if isinstance(result, dict) and "objects" in result:
-			return json.dumps(result["objects"])
-	except Exception:
-		pass
-	return None
 
 
 def _parse_array(raw: str) -> list[dict] | None:

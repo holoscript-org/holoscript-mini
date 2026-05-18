@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+import time
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
@@ -18,13 +19,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from core.utils.logger import get_logger
 from pipeline.semantic_parser import SemanticParser
 from pipeline.fallback_engine import resolve_intent
 from pipeline.retrieval import retrieve
 from pipeline.scene_builder import build_scene
 from pipeline.llm_bridge import llm_generate_objects
 from pipeline.scene_enhancer import enhance_scene
-from pipeline.scene_validator import is_valid, validate_scene
+from pipeline.scene_validator import validate_scene
 from pipeline.repair_loop import DEMO_FALLBACK, repair
 
 OUTPUT_PATH = _ROOT / "core" / "outputs" / "live_scene.json"
@@ -44,26 +46,40 @@ print("[startup] Loading semantic parser (first run downloads model ~80MB)...")
 _PARSER = SemanticParser()
 print("[startup] Ready.")
 
+logger = get_logger("pipeline")
+
 
 def run_pipeline(transcript: str) -> dict:
-	import time
-
 	t0 = time.perf_counter()
 
-	print(f"\n[1] Transcript: {transcript!r}")
+	logger.info("Stage 1: transcript received (len=%d)", len(transcript or ""))
 
+	stage_start = time.perf_counter()
 	raw_intent = _PARSER.parse_intent(transcript)
-	print(f"[2] Embedding intent: {raw_intent}  ({(time.perf_counter() - t0) * 1000:.0f}ms)")
+	logger.info(
+		"Stage 2: semantic parse (objects=%d, structures=%d, systems=%d, effects=%d, %dms)",
+		len(raw_intent.get("objects", [])),
+		len(raw_intent.get("structures", [])),
+		len(raw_intent.get("systems", [])),
+		len(raw_intent.get("effects", [])),
+		int((time.perf_counter() - stage_start) * 1000),
+	)
 
+	stage_start = time.perf_counter()
 	resolved_intent, unresolved = resolve_intent(raw_intent)
-	print(f"[3] Resolved: {resolved_intent}")
+	logger.info(
+		"Stage 3: fallback resolve (resolved=%d, unresolved=%d, %dms)",
+		sum(len(resolved_intent.get(k, [])) for k in ["objects", "structures", "systems", "effects"]),
+		len(unresolved),
+		int((time.perf_counter() - stage_start) * 1000),
+	)
 	if unresolved:
-		print(f"    Unresolved: {unresolved}")
+		logger.debug("Unresolved concepts: %s", unresolved)
 
 	has_concepts = any(resolved_intent[k] for k in ["objects", "structures", "systems"])
 
 	if not has_concepts:
-		print("[4] Nothing resolved -- full LLM fallback")
+		logger.info("Stage 4: no concepts resolved; using LLM fallback")
 		llm_objs = llm_generate_objects(transcript)
 		scene = {
 			"name": transcript[:50],
@@ -75,36 +91,62 @@ def run_pipeline(transcript: str) -> dict:
 			scene = DEMO_FALLBACK
 		components = {"assets": [], "generators": [], "effects": []}
 	else:
+		stage_start = time.perf_counter()
 		components = retrieve(resolved_intent)
+		logger.info(
+			"Stage 4: retrieval (assets=%d, generators=%d, effects=%d, %dms)",
+			len(components.get("assets", [])),
+			len(components.get("generators", [])),
+			len(components.get("effects", [])),
+			int((time.perf_counter() - stage_start) * 1000),
+		)
+
+		stage_start = time.perf_counter()
 		scene = build_scene(components, resolved_intent)
-		print(
-			f"[4] Built: {len(scene.get('objects', []))} objects  ({(time.perf_counter() - t0) * 1000:.0f}ms)"
+		logger.info(
+			"Stage 5: scene builder (objects=%d, %dms)",
+			len(scene.get("objects", [])),
+			int((time.perf_counter() - stage_start) * 1000),
 		)
 
 		if unresolved:
-			print(f"[5] LLM for unresolved: {unresolved}")
+			logger.info("Stage 6: LLM for unresolved (%d concepts)", len(unresolved))
 			for concept in unresolved:
 				extra = llm_generate_objects(concept)
 				if extra:
 					scene["objects"].extend(extra)
+			logger.info("Stage 6: unresolved LLM objects total=%d", len(scene.get("objects", [])))
 
+	stage_start = time.perf_counter()
 	scene = enhance_scene(transcript, resolved_intent, components, scene)
+	logger.info(
+		"Stage 7: scene enhancer (objects=%d, %dms)",
+		len(scene.get("objects", [])),
+		int((time.perf_counter() - stage_start) * 1000),
+	)
 
+	stage_start = time.perf_counter()
 	vr = validate_scene(scene)
-	print(
-		f"[6] Validation -- fatal: {vr.get('fatal')}, errors: {len(vr.get('errors', []))}  ({(time.perf_counter() - t0) * 1000:.0f}ms)"
+	logger.info(
+		"Stage 8: validation (fatal=%s, errors=%d, %dms)",
+		bool(vr.get("fatal")),
+		len(vr.get("errors", [])),
+		int((time.perf_counter() - stage_start) * 1000),
 	)
 
 	if vr.get("fatal"):
+		logger.warning("Stage 9: repair (fatal) -> running repair loop")
 		scene = repair(scene, [vr["fatal"]])
 		vr = validate_scene(scene)
 
 	if vr.get("errors"):
+		logger.warning("Stage 9: repair (errors=%d) -> running repair loop", len(vr.get("errors", [])))
 		scene = repair(scene, vr["errors"])
 		vr = validate_scene(scene)
 
 	final = vr.get("scene") or scene
 	if not final.get("objects"):
+		logger.warning("Stage 10: output fallback -> DEMO_FALLBACK")
 		final = DEMO_FALLBACK
 
 	final = _strip_none(final)
@@ -113,9 +155,12 @@ def run_pipeline(transcript: str) -> dict:
 	OUTPUT_PATH.write_text(json.dumps(final, indent=2), encoding="utf-8")
 
 	elapsed = (time.perf_counter() - t0) * 1000
-	print(f"[7] Saved -> {OUTPUT_PATH}")
-	print(
-		f"    Scene: \"{final.get('name')}\" -- {len(final.get('objects', []))} objects -- {elapsed:.0f}ms total"
+	logger.info("Stage 11: saved -> %s", OUTPUT_PATH)
+	logger.info(
+		"Complete: scene='%s' objects=%d total=%dms",
+		final.get("name"),
+		len(final.get("objects", [])),
+		int(elapsed),
 	)
 	return final
 
