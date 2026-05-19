@@ -17,6 +17,7 @@ _ASSETS = _KB / "assets"
 
 LIVE_SEARCH_MAX_PER_CONCEPT = 1
 LIVE_SEARCH_MIN_UNIQUE = 2
+PREFERRED_LIVE_CATEGORIES = {"anatomy", "medical", "scientific", "creatures", "vehicles"}
 
 with (_KB / "concept_map.json").open(encoding="utf-8") as f:
 	CONCEPT_MAP: dict[str, dict[str, Any]] = json.load(f)
@@ -70,9 +71,17 @@ def _glb_on_disk(src: str | None) -> bool:
 	return (_ROOT / "core" / "assets" / "meshes" / rel).exists()
 
 
-def _needs_live_search(object_concepts: list[str], assets: list[dict[str, Any]]) -> bool:
+def _needs_live_search(
+	object_concepts: list[str],
+	assets: list[dict[str, Any]],
+	missing_objects: list[dict[str, str]],
+) -> bool:
 	if not object_concepts:
 		return False
+	for missing in missing_objects:
+		category = str(missing.get("category") or "").lower()
+		if category in PREFERRED_LIVE_CATEGORIES:
+			return True
 	with_asset = [item for item in assets if item.get("asset_src")]
 	if not with_asset:
 		return True
@@ -80,6 +89,27 @@ def _needs_live_search(object_concepts: list[str], assets: list[dict[str, Any]])
 	if len(object_concepts) > 1 and len(unique_assets) < min(len(object_concepts), LIVE_SEARCH_MIN_UNIQUE):
 		return True
 	return False
+
+
+def _dedupe_assets(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	best: dict[str, dict[str, Any]] = {}
+	for item in assets:
+		concept = str(item.get("concept") or "")
+		if not concept:
+			continue
+		current = best.get(concept)
+		if current is None:
+			best[concept] = item
+			continue
+		current_has_src = bool(current.get("asset_src"))
+		item_has_src = bool(item.get("asset_src"))
+		if item_has_src and not current_has_src:
+			best[concept] = item
+			continue
+		if item_has_src == current_has_src:
+			if float(item.get("confidence", 0)) > float(current.get("confidence", 0)):
+				best[concept] = item
+	return list(best.values())
 
 
 def _asset_metadata(sidecar: dict[str, Any] | None) -> dict[str, Any]:
@@ -116,7 +146,10 @@ def _score_asset(concept: str, category: str | None, sidecar: dict[str, Any] | N
 	return round(min(1.0, base + tag_score + cat_score + meta_score), 3)
 
 
-def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
+def retrieve(
+	intent: dict[str, list[str]],
+	extra_candidates: list[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
 	"""intent = output of semantic_parser.parse_intent()"""
 	assets: list[dict[str, Any]] = []
 	generators: list[dict[str, Any]] = []
@@ -152,6 +185,7 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		assets.append(
 			{
 				"concept": concept,
+				"concept_id": concept,
 				"asset_id": asset_id,
 				"asset_src": asset_src,
 				"sidecar": sidecar,
@@ -172,6 +206,7 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		assets.append(
 			{
 				"concept": concept,
+				"concept_id": concept,
 				"asset_id": (sid or {}).get("id"),
 				"asset_src": src if _glb_on_disk(src or "") else None,
 				"sidecar": sid,
@@ -191,6 +226,7 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		generators.append(
 			{
 				"concept": concept,
+				"concept_id": concept,
 				"generator_type": entry.get("generator", "orbit_cluster"),
 				"central_sidecar": _first_asset_in_category(cc),
 				"satellite_sidecar": _first_asset_in_category(sc),
@@ -204,14 +240,22 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 			{"concept": concept, "handler": entry.get("handler", "anim_orbit")}
 		)
 
-	if _needs_live_search(intent.get("objects", []), assets):
+	extra_candidates = [c for c in (extra_candidates or []) if isinstance(c, str) and c.strip()]
+	if _needs_live_search(intent.get("objects", []), assets, missing_objects) or extra_candidates:
 		try:
 			from pipeline.live_search import fetch_live_assets
 
-			candidates = missing_objects or [
-				{"concept": concept, "category": CONCEPT_MAP.get(concept, {}).get("category") or "abstract"}
-				for concept in intent.get("objects", [])
-			]
+			candidates = list(missing_objects)
+			if not candidates and extra_candidates:
+				candidates = [{"concept": extra, "category": "abstract"} for extra in extra_candidates]
+			elif not candidates:
+				candidates = [
+					{"concept": concept, "category": CONCEPT_MAP.get(concept, {}).get("category") or "abstract"}
+					for concept in intent.get("objects", [])
+				]
+			elif extra_candidates:
+				for extra in extra_candidates:
+					candidates.append({"concept": extra, "category": "abstract"})
 			live_results = fetch_live_assets(
 				candidates,
 				max_per_concept=LIVE_SEARCH_MAX_PER_CONCEPT,
@@ -227,6 +271,7 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 				assets.append(
 					{
 						"concept": concept,
+						"concept_id": concept,
 						"asset_id": sidecar.get("id"),
 						"asset_src": sidecar.get("src"),
 						"sidecar": sidecar,
@@ -241,5 +286,6 @@ def retrieve(intent: dict[str, list[str]]) -> dict[str, list[dict[str, Any]]]:
 		except Exception:
 			pass
 
+	assets = _dedupe_assets(assets)
 	assets.sort(key=lambda item: float(item.get("confidence", 0)), reverse=True)
 	return {"assets": assets, "generators": generators, "effects": effects}

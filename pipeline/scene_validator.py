@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 from typing import Any
 
 VALID_OBJECT_TYPES = {"primitive", "mesh"}
@@ -33,6 +34,9 @@ DEFAULT_LIGHTS = [
 ]
 
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+_ROOT = Path(__file__).resolve().parents[1]
+_VALID_MESH_EXTS = {".glb", ".gltf"}
 
 
 def _is_hex(v: Any) -> bool:
@@ -49,6 +53,19 @@ def _is_vec3(v: Any) -> bool:
 
 def _is_num(v: Any, min_val: float = -math.inf, max_val: float = math.inf) -> bool:
 	return isinstance(v, (int, float)) and math.isfinite(v) and min_val <= v <= max_val
+
+
+def _mesh_exists(model: str) -> bool:
+	if not isinstance(model, str) or not model.strip():
+		return False
+	path = Path(model)
+	if path.suffix.lower() not in _VALID_MESH_EXTS:
+		return False
+	if model.startswith("/"):
+		candidate = _ROOT / "core" / model.lstrip("/")
+	else:
+		candidate = _ROOT / "core" / "assets" / "meshes" / model
+	return candidate.exists()
 
 
 def _validate_material(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
@@ -238,6 +255,8 @@ def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
 			errors.append(
 				f'{prefix}: model (path to .glb/.gltf) is required for type "mesh"'
 			)
+		elif not _mesh_exists(raw["model"]):
+			errors.append(f"{prefix}: model path not found on disk: {raw['model']}")
 
 	mat, me = _validate_material(raw.get("material"), prefix)
 	errors.extend(me)

@@ -79,6 +79,8 @@ def build_scene(components: dict, intent: dict, seed: int = 42) -> dict:
 			obj_id,
 			concept.replace("_", " ").title(),
 		)
+		obj["concept_id"] = item.get("concept_id", concept)
+		obj["semantic_locked"] = True
 		all_objs.append(obj)
 
 	planet = next(
@@ -128,6 +130,8 @@ def build_scene(components: dict, intent: dict, seed: int = 42) -> dict:
 		for obj in objs:
 			obj["id"] = _uid(obj["id"], used)
 			used.add(obj["id"])
+			obj["concept_id"] = item.get("concept_id", concept)
+			obj["semantic_locked"] = True
 		all_objs.extend(objs)
 
 	for spec in components.get("generators", []):
@@ -150,6 +154,8 @@ def build_scene(components: dict, intent: dict, seed: int = 42) -> dict:
 		for obj in objs:
 			obj["id"] = _uid(obj["id"], used)
 			used.add(obj["id"])
+			obj["concept_id"] = spec.get("concept_id", spec.get("concept"))
+			obj["semantic_locked"] = True
 		all_objs.extend(objs)
 
 	for eff in components.get("effects", []):

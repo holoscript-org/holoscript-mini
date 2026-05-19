@@ -19,15 +19,17 @@ You are a scene enhancer. Output ONLY a JSON object that conforms to the scene s
 Hard rules:
 - Preserve ALL existing objects from the base scene (do not delete them).
 - Do NOT change object ids or remove objects.
+- Resolved entities are atomic. Do NOT split or reinterpret semantic meaning.
+- Do NOT introduce new semantic entities or new mesh assets.
+- Do NOT invent model paths. Only use provided assets.
 - Preserve model paths, geometry, and object transforms (position/rotation/scale/parent).
-- You MAY add new objects with unique ids.
 - You MAY refine materials, animations, lights, and camera.
 - Output valid JSON only. No markdown. No explanations.
 - Omit any missing/unknown fields; never emit null values.
 
 Schema summary (sceneFactory.ts):
 - scene: { name?, objects[], lights[], camera }
-- object: { id, type: primitive|mesh, position, material, animation?, geometry? (primitive), model? (mesh), parent?, rotation?, scale?, label? }
+- object: { id, type: primitive|mesh, position, material, animation?, geometry? (primitive), model? (mesh), parent?, rotation?, scale?, label?, materialOverrides? }
 - material: { type:"standard", color:"#rrggbb", roughness 0-1, metalness 0-1, opacity?, transparent?, map?, normalMap?, roughnessMap?, metalnessMap?, emissive?, emissiveMap?, emissiveIntensity? }
 - animation: { type:"none"|"orbit"|"spin", center?, center_ref?, axis?, speed?, phase? }
 - lights: ambient|directional|point|spot; { type, intensity, color?, position?, castShadow? }
@@ -78,10 +80,33 @@ def _build_prompt(
             }
         )
 
+    available_assets = [
+        {
+            "concept": item.get("concept"),
+            "asset_id": item.get("asset_id"),
+            "asset_src": item.get("asset_src"),
+        }
+        for item in components.get("assets", [])
+        if item.get("asset_src")
+    ]
+
+    locked_entities = [
+        {
+            "id": obj.get("id"),
+            "concept_id": obj.get("concept_id"),
+            "model": obj.get("model"),
+            "semantic_locked": obj.get("semantic_locked", True),
+        }
+        for obj in base_scene.get("objects", [])
+        if isinstance(obj, dict)
+    ]
+
     payload = {
         "transcript": transcript,
         "semantic_intent": intent,
         "retrieved_assets": assets,
+        "available_assets": available_assets,
+        "locked_entities": locked_entities,
         "base_scene": base_scene,
     }
     return f"{SYSTEM_PROMPT}\n\nINPUT:\n{json.dumps(payload, indent=2)}\n\nOUTPUT:\n"
@@ -116,8 +141,14 @@ def _merge_scene(base_scene: dict[str, Any], enhanced: dict[str, Any]) -> dict[s
         if obj_id in seen:
             continue
         base_obj = base_objects.get(obj_id)
+        if not base_obj:
+            # Enhancer is not allowed to introduce new objects.
+            continue
         if base_obj:
             merged = dict(base_obj)
+            overrides = obj.get("materialOverrides") if isinstance(obj.get("materialOverrides"), dict) else None
+            if overrides:
+                merged["material"] = _apply_material_overrides(merged.get("material"), overrides)
             for key in ["material", "animation", "label"]:
                 if isinstance(obj.get(key), dict) or isinstance(obj.get(key), str):
                     merged[key] = obj.get(key)
@@ -125,9 +156,6 @@ def _merge_scene(base_scene: dict[str, Any], enhanced: dict[str, Any]) -> dict[s
                 merged_objects.append(merged)
             else:
                 merged_objects.append(base_obj)
-        else:
-            if _is_valid_object(obj):
-                merged_objects.append(obj)
         seen.add(obj_id)
 
     for obj_id, obj in base_objects.items():
@@ -156,6 +184,29 @@ def _is_valid_object(obj: dict[str, Any]) -> bool:
     }
     vr = validate_scene(probe)
     return not vr.get("fatal") and not vr.get("errors") and bool(vr.get("scene", {}).get("objects"))
+
+
+def _apply_material_overrides(base_material: Any, overrides: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(base_material, dict):
+        base_material = {"type": "standard", "color": "#888888", "roughness": 0.6, "metalness": 0.1}
+    merged = dict(base_material)
+    for key in [
+        "color",
+        "roughness",
+        "metalness",
+        "opacity",
+        "transparent",
+        "map",
+        "normalMap",
+        "roughnessMap",
+        "metalnessMap",
+        "emissive",
+        "emissiveMap",
+        "emissiveIntensity",
+    ]:
+        if key in overrides:
+            merged[key] = overrides[key]
+    return merged
 
 
 def _strip_none(value: Any) -> Any:

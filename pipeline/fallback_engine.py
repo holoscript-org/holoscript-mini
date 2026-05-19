@@ -37,6 +37,18 @@ def _resolve_single(token: str) -> str | None:
 	return None
 
 
+def _resolve_phrase(phrase: str) -> str | None:
+	"""Resolve an atomic phrase without splitting into sub-tokens."""
+	p = phrase.lower().strip()
+	if p in CONCEPT_MAP:
+		return p
+	if p in SYNONYM_MAP:
+		for target in SYNONYM_MAP[p]:
+			if target in CONCEPT_MAP:
+				return target
+	return None
+
+
 def resolve_intent(intent: dict) -> tuple[dict, list[str]]:
 	"""
 	Resolves anything in intent that didn't make it through embedding.
@@ -44,6 +56,24 @@ def resolve_intent(intent: dict) -> tuple[dict, list[str]]:
 	"""
 	resolved = {"objects": [], "structures": [], "systems": [], "effects": []}
 	unresolved: list[str] = []
+	phrase_hits = intent.get("_phrase_hits", []) if isinstance(intent, dict) else []
+	for phrase in phrase_hits:
+		if not isinstance(phrase, str):
+			continue
+		mapped = _resolve_phrase(phrase)
+		if mapped:
+			entry = CONCEPT_MAP[mapped]
+			target = {
+				"object": "objects",
+				"structure": "structures",
+				"system": "systems",
+				"effect": "effects",
+			}.get(entry["type"], "objects")
+			if mapped not in resolved[target]:
+				resolved[target].append(mapped)
+		else:
+			if phrase not in unresolved:
+				unresolved.append(phrase)
 	for bucket in ["objects", "structures", "systems", "effects"]:
 		for concept in intent.get(bucket, []):
 			mapped = _resolve_single(concept)

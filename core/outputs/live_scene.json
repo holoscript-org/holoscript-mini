@@ -1,0 +1,62 @@
+{
+  "name": "Human Heart",
+  "objects": [
+    {
+      "id": "human_heart",
+      "type": "mesh",
+      "position": [
+        6.56,
+        0.0,
+        0.0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#888888",
+        "roughness": 0.6,
+        "metalness": 0.1
+      },
+      "animation": {
+        "type": "none"
+      },
+      "model": "/assets/meshes/abstract/heart_1.glb",
+      "scale": [
+        0.858,
+        0.858,
+        0.858
+      ],
+      "label": "Human Heart"
+    }
+  ],
+  "lights": [
+    {
+      "type": "ambient",
+      "intensity": 0.4,
+      "color": "#ffffff",
+      "castShadow": false
+    },
+    {
+      "type": "directional",
+      "intensity": 1.2,
+      "color": "#ffffff",
+      "position": [
+        10,
+        10,
+        10
+      ],
+      "castShadow": true
+    }
+  ],
+  "camera": {
+    "position": [
+      6.56,
+      5.0,
+      18.0
+    ],
+    "target": [
+      6.56,
+      0.0,
+      0.0
+    ],
+    "fov": 65
+  }
+}
