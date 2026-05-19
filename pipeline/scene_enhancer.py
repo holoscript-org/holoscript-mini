@@ -24,6 +24,7 @@ Hard rules:
 - Do NOT invent model paths. Only use provided assets.
 - Preserve model paths, geometry, and object transforms (position/rotation/scale/parent).
 - You MAY refine materials, animations, lights, and camera.
+- When changing appearance, use materialOverrides instead of replacing models.
 - Output valid JSON only. No markdown. No explanations.
 - Omit any missing/unknown fields; never emit null values.
 
@@ -42,12 +43,13 @@ def enhance_scene(
     intent: dict[str, Any],
     components: dict[str, Any],
     base_scene: dict[str, Any],
+    style_hints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     key = os.getenv("GROQ_API_KEY")
     if not key:
         return _strip_none(base_scene)
 
-    prompt = _build_prompt(transcript, intent, components, base_scene)
+    prompt = _build_prompt(transcript, intent, components, base_scene, style_hints)
     raw = generate_raw(prompt, SYSTEM_PROMPT)
     if not raw:
         return _strip_none(base_scene)
@@ -67,6 +69,7 @@ def _build_prompt(
     intent: dict[str, Any],
     components: dict[str, Any],
     base_scene: dict[str, Any],
+    style_hints: dict[str, Any] | None,
 ) -> str:
     assets = []
     for item in components.get("assets", []):
@@ -107,6 +110,7 @@ def _build_prompt(
         "retrieved_assets": assets,
         "available_assets": available_assets,
         "locked_entities": locked_entities,
+        "style_hints": style_hints or _extract_style_hints(transcript),
         "base_scene": base_scene,
     }
     return f"{SYSTEM_PROMPT}\n\nINPUT:\n{json.dumps(payload, indent=2)}\n\nOUTPUT:\n"
@@ -207,6 +211,31 @@ def _apply_material_overrides(base_material: Any, overrides: dict[str, Any]) -> 
         if key in overrides:
             merged[key] = overrides[key]
     return merged
+
+
+def _extract_style_hints(transcript: str) -> dict[str, Any]:
+    text = (transcript or "").lower()
+    color_map = {
+        "red": "#b91c1c",
+        "crimson": "#dc2626",
+        "pink": "#ec4899",
+        "blue": "#2563eb",
+        "green": "#16a34a",
+        "gold": "#d97706",
+        "yellow": "#f59e0b",
+        "white": "#f8fafc",
+        "black": "#0f172a",
+        "silver": "#94a3b8",
+    }
+    requested = [color_map[word] for word in color_map if word in text]
+    hints: dict[str, Any] = {}
+    if requested:
+        hints["requested_colors"] = requested
+    if "heart" in text:
+        hints.setdefault("suggested_overrides", []).append(
+            {"match": "heart", "materialOverrides": {"color": "#b91c1c"}}
+        )
+    return hints
 
 
 def _strip_none(value: Any) -> Any:
