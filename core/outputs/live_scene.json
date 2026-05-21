@@ -1,8 +1,8 @@
 {
-  "name": "Mediaeval Castle Surrounded by Lava",
+  "name": "Moving Clock",
   "objects": [
     {
-      "id": "castle",
+      "id": "moving_clock",
       "type": "mesh",
       "position": [
         0,
@@ -16,51 +16,28 @@
         "metalness": 0.0
       },
       "animation": {
-        "type": "none"
+        "type": "spin",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "speed": 0.05
       },
-      "model": "/assets/meshes/abstract/castle.glb",
+      "model": "/assets/meshes/abstract/analog_clock_2.glb",
       "scale": [
-        5,
-        5,
-        5
-      ]
-    },
-    {
-      "id": "lava",
-      "type": "primitive",
-      "position": [
-        0,
-        -10,
-        0
+        2,
+        2,
+        2
       ],
-      "material": {
-        "type": "standard",
-        "color": "#ff3300",
-        "roughness": 0.5,
-        "metalness": 0.0,
-        "emissive": "#ff9900",
-        "emissiveIntensity": 1.0
-      },
-      "animation": {
-        "type": "none"
-      },
-      "geometry": {
-        "type": "plane",
-        "width": 20,
-        "height": 20
-      },
-      "scale": [
-        1,
-        1,
-        1
-      ]
+      "label": "Moving Clock"
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.2,
-      "color": "#ff9900",
+      "intensity": 0.3,
+      "color": "#ffffff",
       "castShadow": false
     },
     {
@@ -68,20 +45,20 @@
       "intensity": 1.0,
       "color": "#ffffff",
       "position": [
-        10,
-        10,
-        10
+        5,
+        5,
+        5
       ],
       "castShadow": true
     },
     {
       "type": "point",
-      "intensity": 5.0,
-      "color": "#ff3300",
+      "intensity": 2.0,
+      "color": "#cccccc",
       "position": [
         0,
-        -5,
-        0
+        0,
+        5
       ],
       "castShadow": false
     }
@@ -89,14 +66,14 @@
   "camera": {
     "position": [
       0,
-      10,
-      20
+      0,
+      10
     ],
     "target": [
       0,
       0,
       0
     ],
-    "fov": 60
+    "fov": 45
   }
 }
