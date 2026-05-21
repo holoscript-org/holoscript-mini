@@ -226,6 +226,7 @@ renderer/dev/
 # Core generated outputs (written at runtime by Member 1)
 core/outputs/scene_grammar.json
 
+
 # Root-level grammar artifact (superseded by core/outputs/)
 /scene_grammar.json
 

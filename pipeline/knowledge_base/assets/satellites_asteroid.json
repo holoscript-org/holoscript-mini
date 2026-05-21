@@ -1,0 +1,15 @@
+{
+  "id": "satellites_asteroid",
+  "src": "/assets/meshes/satellites/asteroid.glb",
+  "category": "satellites",
+  "tags": [
+    "space",
+    "planetoid",
+    "galaxy",
+    "solarsystem",
+    "spacecraft",
+    "satellite"
+  ],
+  "author": "Poly by Google",
+  "license": "CC-BY"
+}

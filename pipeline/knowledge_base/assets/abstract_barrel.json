@@ -1,0 +1,11 @@
+{
+  "id": "abstract_barrel",
+  "src": "/assets/meshes/abstract/barrel.glb",
+  "category": "abstract",
+  "tags": [
+    "barrel",
+    "abstract"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

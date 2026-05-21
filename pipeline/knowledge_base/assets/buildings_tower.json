@@ -1,0 +1,14 @@
+{
+  "id": "buildings_tower",
+  "src": "/assets/meshes/buildings/tower.glb",
+  "category": "buildings",
+  "tags": [
+    "hulk",
+    "pillar",
+    "column",
+    "tower",
+    "building"
+  ],
+  "author": "Anonymous",
+  "license": "CC-BY"
+}

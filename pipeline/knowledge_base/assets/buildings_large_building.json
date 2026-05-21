@@ -1,0 +1,13 @@
+{
+  "id": "buildings_large_building",
+  "src": "/assets/meshes/buildings/large_building.glb",
+  "category": "buildings",
+  "tags": [
+    "building",
+    "urban",
+    "office building",
+    "city"
+  ],
+  "author": "Kenney",
+  "license": "CC-BY"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "abstract_chest",
+  "src": "/assets/meshes/abstract/chest.glb",
+  "category": "abstract",
+  "tags": [
+    "chest",
+    "abstract"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

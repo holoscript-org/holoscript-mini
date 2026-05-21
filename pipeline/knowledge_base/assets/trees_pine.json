@@ -1,0 +1,13 @@
+{
+  "id": "trees_pine",
+  "src": "/assets/meshes/trees/pine.glb",
+  "category": "trees",
+  "tags": [
+    "tree",
+    "evergreen",
+    "forest",
+    "pine tree"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

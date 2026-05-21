@@ -1,13 +1,11 @@
-import os
 import json
+import os
 import time
-import requests
-from pydantic import ValidationError
 
-from llm.scene_schema import SceneSchema
-from llm.prompt_templates import build_system_prompt, build_refinement_prompt
-from llm.context_manager import ContextManager
+import requests
+
 from core.utils.logger import get_logger
+from llm.context_manager import ContextManager
 
 logger = get_logger("groq_client")
 context_manager = ContextManager()
@@ -16,7 +14,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # Provide a fallback model and URL
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.1-8b-instant"
-from llm.ollama_client import generate_scene_ollama
+
+SYSTEM_PROMPT = """
+You are a 3D scene generator. Output ONLY raw JSON.
+Do not include markdown or code fences.
+""".strip()
 
 FALLBACK_SCENE = {
     "objects": [
@@ -43,7 +45,7 @@ def _extract_json_from_text(text: str) -> dict | None:
     except Exception:
         return None
 
-def _call_groq(prompt: str) -> str:
+def _call_groq(prompt: str, system_prompt: str | None = None) -> str:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY not found in environment. Please add it to your .env file.")
     
@@ -55,7 +57,10 @@ def _call_groq(prompt: str) -> str:
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "You are a scene generator. You must output strict, valid JSON. Do not write markdown blocks."},
+            {
+                "role": "system",
+                "content": system_prompt or "You are a scene generator. You must output strict, valid JSON. Do not write markdown blocks.",
+            },
             {"role": "user", "content": prompt}
         ]
     }
@@ -65,15 +70,30 @@ def _call_groq(prompt: str) -> str:
     result = response.json()
     return result["choices"][0]["message"]["content"]
 
-def _validate(raw_json: str) -> dict:
-    scene = SceneSchema.model_validate_json(raw_json)
-    return scene.model_dump()
+
+def generate_raw(prompt: str, system_prompt: str) -> str | None:
+    try:
+        return _call_groq(prompt, system_prompt=system_prompt)
+    except Exception as exc:
+        logger.error("Groq request failed: %s", exc)
+        return None
+
+def _build_prompt(command: str, previous_scene: dict | None) -> str:
+    if previous_scene is not None:
+        return (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"Current scene:\n{json.dumps(previous_scene, indent=2)}\n\n"
+            f"User command: {command}\n\n"
+            "Apply the command to the scene. Output ONLY the modified scene as raw JSON."
+        )
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"User command: {command}\n\n"
+        "Output ONLY the JSON object."
+    )
 
 def generate_scene_groq(command: str, previous_scene: dict | None) -> dict:
-    if previous_scene is not None:
-        prompt = build_refinement_prompt(previous_scene, command)
-    else:
-        prompt = f"{build_system_prompt()}\n\nUser command: {command}"
+    prompt = _build_prompt(command, previous_scene)
         
     start = time.perf_counter()
     try:
@@ -81,7 +101,7 @@ def generate_scene_groq(command: str, previous_scene: dict | None) -> dict:
         json_obj = _extract_json_from_text(raw)
         if not json_obj:
             raise ValueError("No JSON found in Groq response.")
-        scene = _validate(json.dumps(json_obj))
+        scene = json_obj
         elapsed = time.perf_counter() - start
         logger.info("Groq latency: %.1fms", elapsed * 1000)
         return scene
@@ -90,28 +110,15 @@ def generate_scene_groq(command: str, previous_scene: dict | None) -> dict:
         return FALLBACK_SCENE
 
 def generate_scene(command: str, intent: str = "NEW_SCENE") -> dict:
-    from llm.provider_config import get_provider
-    provider = get_provider()
     previous_scene = context_manager.last_scene() if intent == "REFINE" else None
-    
-    if provider == "HYBRID" or provider == "GROQ":
-        logger.info("Attempting Groq API...")
-        try:
-            result = generate_scene_groq(command, previous_scene)
-            if result != FALLBACK_SCENE:
-                context_manager.add(command, result)
-                return result
-        except Exception as e:
-            logger.warning("Groq failed: %s. Falling back to Ollama...", e)
-            
-        logger.info("Running Ollama Fallback...")
-        raw = generate_scene_ollama(command, previous_scene)
-        result = raw if raw is not None else FALLBACK_SCENE
-        context_manager.add(command, result)
-        return result
-    else:
-        logger.info("Running Ollama ONLY Mode...")
-        raw = generate_scene_ollama(command, previous_scene)
-        result = raw if raw is not None else FALLBACK_SCENE
-        context_manager.add(command, result)
-        return result
+    logger.info("Attempting Groq API...")
+    try:
+        result = generate_scene_groq(command, previous_scene)
+        if result != FALLBACK_SCENE:
+            context_manager.add(command, result)
+            return result
+    except Exception as e:
+        logger.warning("Groq failed: %s. Returning fallback scene...", e)
+
+    context_manager.add(command, FALLBACK_SCENE)
+    return FALLBACK_SCENE

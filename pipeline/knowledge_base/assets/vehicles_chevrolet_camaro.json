@@ -1,0 +1,13 @@
+{
+  "id": "vehicles_chevrolet_camaro",
+  "src": "/assets/meshes/vehicles/chevrolet_camaro.glb",
+  "category": "vehicles",
+  "tags": [
+    "car",
+    "camaro",
+    "chevrolet",
+    "vehicle"
+  ],
+  "author": "PuKkBuMXDD",
+  "license": "CC-BY"
+}

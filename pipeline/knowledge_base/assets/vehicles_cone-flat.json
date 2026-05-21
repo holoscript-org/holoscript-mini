@@ -1,0 +1,13 @@
+{
+  "id": "vehicles_cone-flat",
+  "src": "/assets/meshes/vehicles/cone-flat.glb",
+  "category": "vehicles",
+  "tags": [
+    "cone",
+    "flat",
+    "vehicles",
+    "vehicle"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

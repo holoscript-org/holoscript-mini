@@ -1,0 +1,11 @@
+{
+  "id": "humans_basic_character",
+  "src": "/assets/meshes/humans/basic_character.glb",
+  "category": "humans",
+  "tags": [
+    "character",
+    "human"
+  ],
+  "author": "Yogoshimo 2.0",
+  "license": "CC-BY"
+}

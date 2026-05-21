@@ -1,0 +1,11 @@
+{
+  "id": "abstract_Avocado",
+  "src": "/assets/meshes/abstract/Avocado.glb",
+  "category": "abstract",
+  "tags": [
+    "avocado",
+    "abstract"
+  ],
+  "author": "Khronos Group",
+  "license": "CC-BY 4.0"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "satellites_wikiplanet_space_station_wss",
+  "src": "/assets/meshes/satellites/wikiplanet_space_station_wss.glb",
+  "category": "satellites",
+  "tags": [
+    "skylab",
+    "iss",
+    "midway",
+    "space station",
+    "satellite"
+  ],
+  "author": "Alan Zimmerman",
+  "license": "CC-BY"
+}

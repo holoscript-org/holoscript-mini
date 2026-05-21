@@ -1,0 +1,12 @@
+{
+  "id": "satellites_satellite",
+  "src": "/assets/meshes/satellites/satellite.glb",
+  "category": "satellites",
+  "tags": [
+    "space",
+    "orbit",
+    "satellite"
+  ],
+  "author": "Poly by Google",
+  "license": "CC-BY"
+}

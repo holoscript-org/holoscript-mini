@@ -1,0 +1,11 @@
+{
+  "id": "abstract_blood_splat",
+  "src": "/assets/meshes/abstract/blood_splat.glb",
+  "category": "abstract",
+  "tags": [
+    "splatter",
+    "blood",
+    "abstract"
+  ],
+  "author": "Quaternius"
+}

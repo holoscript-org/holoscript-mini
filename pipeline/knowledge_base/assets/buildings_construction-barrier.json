@@ -1,0 +1,13 @@
+{
+  "id": "buildings_construction-barrier",
+  "src": "/assets/meshes/buildings/construction-barrier.glb",
+  "category": "buildings",
+  "tags": [
+    "construction",
+    "barrier",
+    "buildings",
+    "building"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}
