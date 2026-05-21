@@ -1,0 +1,11 @@
+{
+  "id": "abstract_pickup_crate_1",
+  "src": "/assets/meshes/abstract/pickup_crate_1.glb",
+  "category": "abstract",
+  "tags": [
+    "box",
+    "human chest",
+    "abstract"
+  ],
+  "author": "Quaternius"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "abstract_dog",
+  "src": "/assets/meshes/abstract/dog.glb",
+  "category": "abstract",
+  "tags": [
+    "animal",
+    "pet",
+    "dog",
+    "give dog collar",
+    "abstract"
+  ],
+  "author": "Quaternius"
+}

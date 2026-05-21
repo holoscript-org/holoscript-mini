@@ -1,0 +1,13 @@
+{
+  "id": "abstract_basic_chain",
+  "src": "/assets/meshes/abstract/basic_chain.glb",
+  "category": "abstract",
+  "tags": [
+    "skeleton",
+    "monomer",
+    "abc",
+    "structure benzene",
+    "abstract"
+  ],
+  "author": "Justin Randall"
+}

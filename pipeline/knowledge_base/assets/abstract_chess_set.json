@@ -1,0 +1,13 @@
+{
+  "id": "abstract_chess_set",
+  "src": "/assets/meshes/abstract/chess_set.glb",
+  "category": "abstract",
+  "tags": [
+    "chesspiece",
+    "chess game",
+    "reversis",
+    "chess board",
+    "abstract"
+  ],
+  "author": "Jarlan Perez"
+}

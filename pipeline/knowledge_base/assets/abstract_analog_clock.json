@@ -1,0 +1,15 @@
+{
+  "id": "abstract_analog_clock",
+  "src": "/assets/meshes/abstract/analog_clock.glb",
+  "category": "abstract",
+  "tags": [
+    "timepiece",
+    "measure",
+    "hands",
+    "hours",
+    "minutes",
+    "generate wrist watch",
+    "abstract"
+  ],
+  "author": "Poly by Google"
+}

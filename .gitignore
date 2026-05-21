@@ -241,5 +241,3 @@ gui/node_modules/
 gui/.next/
 gui/tsconfig.tsbuildinfo
 
-/pipeline/knowledge_base
-/core/assets/meshes

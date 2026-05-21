@@ -1,0 +1,13 @@
+{
+  "id": "abstract_human_hand",
+  "src": "/assets/meshes/abstract/human_hand.glb",
+  "category": "abstract",
+  "tags": [
+    "thumb",
+    "arm",
+    "atm",
+    "generate wrist",
+    "abstract"
+  ],
+  "author": "Nouri Mohamed"
+}

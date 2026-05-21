@@ -1,0 +1,13 @@
+{
+  "id": "abstract_building_l",
+  "src": "/assets/meshes/abstract/building_l.glb",
+  "category": "abstract",
+  "tags": [
+    "pipe",
+    "cylinder",
+    "structure",
+    "structure double",
+    "abstract"
+  ],
+  "author": "Quaternius"
+}

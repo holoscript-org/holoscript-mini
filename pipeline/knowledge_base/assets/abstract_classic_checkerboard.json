@@ -1,0 +1,13 @@
+{
+  "id": "abstract_classic_checkerboard",
+  "src": "/assets/meshes/abstract/classic_checkerboard.glb",
+  "category": "abstract",
+  "tags": [
+    "check",
+    "checking",
+    "chess",
+    "board game",
+    "abstract"
+  ],
+  "author": "Jarlan Perez"
+}

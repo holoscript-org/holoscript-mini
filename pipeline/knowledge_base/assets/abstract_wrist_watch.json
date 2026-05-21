@@ -1,0 +1,13 @@
+{
+  "id": "abstract_wrist_watch",
+  "src": "/assets/meshes/abstract/wrist_watch.glb",
+  "category": "abstract",
+  "tags": [
+    "accessory",
+    "clock",
+    "timepiece",
+    "wrist watch",
+    "abstract"
+  ],
+  "author": "Poly by Google"
+}

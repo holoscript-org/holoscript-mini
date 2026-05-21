@@ -1,0 +1,11 @@
+{
+  "id": "abstract_doorway",
+  "src": "/assets/meshes/abstract/doorway.glb",
+  "category": "abstract",
+  "tags": [
+    "door",
+    "generate door window",
+    "abstract"
+  ],
+  "author": "Kenney"
+}

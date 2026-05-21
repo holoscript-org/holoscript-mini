@@ -1,0 +1,13 @@
+{
+  "id": "abstract_dna_strand",
+  "src": "/assets/meshes/abstract/dna_strand.glb",
+  "category": "abstract",
+  "tags": [
+    "polymerase",
+    "palindrome",
+    "chromosome",
+    "helical structure dna",
+    "abstract"
+  ],
+  "author": "Lin Fisher"
+}
