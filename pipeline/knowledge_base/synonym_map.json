@@ -12,13 +12,12 @@
   "android": ["human"],
   "figure": ["human"],
 
-  "spaceship": ["vehicle"],
-  "rocket": ["vehicle"],
-  "ufo": ["vehicle"],
+  "spaceship": ["starship"],
+  "rocket": ["starship"],
+  "ufo": ["starship"],
   "aircraft": ["vehicle"],
   "jet": ["vehicle"],
-  "ship": ["vehicle"],
-  "shuttle": ["vehicle"],
+  "shuttle": ["starship"],
   "fighter": ["vehicle"],
 
   "castle": ["building"],

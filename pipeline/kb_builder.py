@@ -140,7 +140,7 @@ def _concept_aliases(category: str) -> list[str]:
     if category == "humans":
         aliases.extend(["human", "person", "character", "figure"])
     elif category == "vehicles":
-        aliases.extend(["vehicle", "car", "rocket", "ship", "spacecraft"])
+        aliases.extend(["vehicle", "car", "truck"])
     elif category == "buildings":
         aliases.extend(["building", "house", "tower", "skyscraper", "structure"])
     elif category == "trees":
@@ -148,7 +148,7 @@ def _concept_aliases(category: str) -> list[str]:
     elif category == "planets":
         aliases.extend(["planet", "world", "moon", "asteroid", "star"])
     elif category == "satellites":
-        aliases.extend(["satellite", "probe", "station", "spacecraft"])
+        aliases.extend(["satellite", "probe", "station"])
     elif category == "abstract":
         aliases.extend(["abstract", "crystal", "gem", "ring"])
     return list(dict.fromkeys(aliases))

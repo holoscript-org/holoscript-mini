@@ -103,7 +103,6 @@ class SemanticParser:
         phrase_hits, phrase_tokens = self._match_phrases(text)
         blocked_tokens = set(phrase_tokens)
 
-        scores = self._scores(text)
         buckets = {"objects": [], "structures": [], "systems": [], "effects": []}
         type_to_bucket = {
             "object": "objects",
@@ -119,6 +118,12 @@ class SemanticParser:
             bucket = type_to_bucket.get(entry.get("type"))
             if bucket and concept not in buckets[bucket]:
                 buckets[bucket].append(concept)
+
+        # Apply lexical matches before embeddings to lock explicit object hits.
+        self._apply_lexical_supplement(text, buckets, type_to_bucket, blocked_tokens)
+        locked_objects = set(buckets["objects"])
+
+        scores = self._scores(text)
 
         scored_concepts = sorted(
             ((concept, float(scores[idx])) for idx, concept in enumerate(self._concepts)),
@@ -136,6 +141,8 @@ class SemanticParser:
             if concept in blocked_tokens and concept not in phrase_hits:
                 continue
             bucket = type_to_bucket.get(entry.get("type"))
+            if bucket == "objects" and locked_objects and concept not in locked_objects:
+                continue
             if bucket == "objects" and score < OBJECT_EMBEDDING_THRESHOLD:
                 continue
             if bucket == "objects":
@@ -147,7 +154,6 @@ class SemanticParser:
             if bucket and concept not in buckets[bucket]:
                 buckets[bucket].append(concept)
 
-        self._apply_lexical_supplement(text, buckets, type_to_bucket, blocked_tokens)
         buckets["_phrase_hits"] = phrase_hits
         buckets["_unresolved_tokens"] = self._find_unresolved_tokens(text, blocked_tokens)
         return buckets
