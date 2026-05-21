@@ -1,8 +1,8 @@
 {
-  "name": "Human Heart",
+  "name": "Starship",
   "objects": [
     {
-      "id": "human_heart",
+      "id": "starship",
       "type": "mesh",
       "position": [
         6.56,
@@ -18,13 +18,13 @@
       "animation": {
         "type": "none"
       },
-      "model": "/assets/meshes/abstract/heart_1.glb",
+      "model": "/assets/meshes/satellites/spaceship.glb",
       "scale": [
         0.858,
         0.858,
         0.858
       ],
-      "label": "Human Heart"
+      "label": "Starship"
     }
   ],
   "lights": [

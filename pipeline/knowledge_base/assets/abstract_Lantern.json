@@ -1,0 +1,11 @@
+{
+  "id": "abstract_Lantern",
+  "src": "/assets/meshes/abstract/Lantern.glb",
+  "category": "abstract",
+  "tags": [
+    "lantern",
+    "abstract"
+  ],
+  "author": "Khronos Group",
+  "license": "CC-BY 4.0"
+}

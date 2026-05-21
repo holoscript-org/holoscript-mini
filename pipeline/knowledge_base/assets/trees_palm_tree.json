@@ -1,0 +1,13 @@
+{
+  "id": "trees_palm_tree",
+  "src": "/assets/meshes/trees/palm_tree.glb",
+  "category": "trees",
+  "tags": [
+    "palm tree",
+    "plant",
+    "tree",
+    "leaf"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

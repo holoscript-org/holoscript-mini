@@ -1,0 +1,13 @@
+{
+  "id": "vehicles_debris-bolt",
+  "src": "/assets/meshes/vehicles/debris-bolt.glb",
+  "category": "vehicles",
+  "tags": [
+    "debris",
+    "bolt",
+    "vehicles",
+    "vehicle"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

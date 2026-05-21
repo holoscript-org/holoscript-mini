@@ -1,0 +1,13 @@
+{
+  "id": "buildings_construction-light",
+  "src": "/assets/meshes/buildings/construction-light.glb",
+  "category": "buildings",
+  "tags": [
+    "construction",
+    "light",
+    "buildings",
+    "building"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

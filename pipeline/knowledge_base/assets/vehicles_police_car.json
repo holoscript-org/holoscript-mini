@@ -1,0 +1,13 @@
+{
+  "id": "vehicles_police_car",
+  "src": "/assets/meshes/vehicles/police_car.glb",
+  "category": "vehicles",
+  "tags": [
+    "car",
+    "vehicle",
+    "transportation",
+    "police car"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

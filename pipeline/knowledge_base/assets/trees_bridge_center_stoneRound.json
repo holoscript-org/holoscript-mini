@@ -1,0 +1,14 @@
+{
+  "id": "trees_bridge_center_stoneRound",
+  "src": "/assets/meshes/trees/bridge_center_stoneRound.glb",
+  "category": "trees",
+  "tags": [
+    "bridge",
+    "center",
+    "stoneround",
+    "trees",
+    "tree"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

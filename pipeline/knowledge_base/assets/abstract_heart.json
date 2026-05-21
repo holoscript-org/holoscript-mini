@@ -1,0 +1,11 @@
+{
+  "id": "abstract_heart",
+  "src": "/assets/meshes/abstract/heart.glb",
+  "category": "abstract",
+  "tags": [
+    "icon",
+    "heart",
+    "abstract"
+  ],
+  "author": "Poly by Google"
+}

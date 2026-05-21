@@ -1,0 +1,13 @@
+{
+  "id": "trees_pine_tree",
+  "src": "/assets/meshes/trees/pine_tree.glb",
+  "category": "trees",
+  "tags": [
+    "pine",
+    "true pine",
+    "tree",
+    "pine tree"
+  ],
+  "author": "Danni Bittman",
+  "license": "CC-BY"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "humans_animated_human",
+  "src": "/assets/meshes/humans/animated_human.glb",
+  "category": "humans",
+  "tags": [
+    "character",
+    "person",
+    "man",
+    "human figure",
+    "human"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

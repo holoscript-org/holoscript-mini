@@ -1,0 +1,13 @@
+{
+  "id": "buildings_construction-cone",
+  "src": "/assets/meshes/buildings/construction-cone.glb",
+  "category": "buildings",
+  "tags": [
+    "construction",
+    "cone",
+    "buildings",
+    "building"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "abstract_gradd_hospital_room",
+  "src": "/assets/meshes/abstract/gradd_hospital_room.glb",
+  "category": "abstract",
+  "tags": [
+    "ward",
+    "surgery",
+    "medical",
+    "abstract"
+  ],
+  "author": "GRADD CO"
+}

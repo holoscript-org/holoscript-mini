@@ -1,0 +1,14 @@
+{
+  "id": "trees_fiddle-leaf_plant",
+  "src": "/assets/meshes/trees/fiddle-leaf_plant.glb",
+  "category": "trees",
+  "tags": [
+    "plant",
+    "pot",
+    "leaves",
+    "foliage",
+    "tree"
+  ],
+  "author": "Poly by Google",
+  "license": "CC-BY"
+}

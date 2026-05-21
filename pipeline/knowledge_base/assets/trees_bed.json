@@ -1,0 +1,12 @@
+{
+  "id": "trees_bed",
+  "src": "/assets/meshes/trees/bed.glb",
+  "category": "trees",
+  "tags": [
+    "bed",
+    "trees",
+    "tree"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

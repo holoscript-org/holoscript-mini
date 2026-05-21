@@ -1,0 +1,15 @@
+{
+  "id": "planets_asteroids",
+  "src": "/assets/meshes/planets/asteroids.glb",
+  "category": "planets",
+  "tags": [
+    "planetoid",
+    "minor planet",
+    "planets",
+    "space",
+    "asteroid",
+    "planet"
+  ],
+  "author": "Jarlan Perez",
+  "license": "CC-BY"
+}

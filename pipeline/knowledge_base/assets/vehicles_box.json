@@ -1,0 +1,12 @@
+{
+  "id": "vehicles_box",
+  "src": "/assets/meshes/vehicles/box.glb",
+  "category": "vehicles",
+  "tags": [
+    "box",
+    "vehicles",
+    "vehicle"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

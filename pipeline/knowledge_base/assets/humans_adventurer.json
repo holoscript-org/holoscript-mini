@@ -1,0 +1,13 @@
+{
+  "id": "humans_adventurer",
+  "src": "/assets/meshes/humans/adventurer.glb",
+  "category": "humans",
+  "tags": [
+    "person",
+    "human",
+    "man",
+    "character"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

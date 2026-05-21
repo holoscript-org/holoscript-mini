@@ -1,0 +1,13 @@
+{
+  "id": "satellites_spaceship_1",
+  "src": "/assets/meshes/satellites/spaceship_1.glb",
+  "category": "satellites",
+  "tags": [
+    "spacecraft",
+    "starship",
+    "astronaut",
+    "satellite"
+  ],
+  "author": "Danni Bittman",
+  "license": "CC-BY"
+}

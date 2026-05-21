@@ -1,0 +1,14 @@
+{
+  "id": "planets_moon",
+  "src": "/assets/meshes/planets/moon.glb",
+  "category": "planets",
+  "tags": [
+    "astronomy",
+    "space",
+    "solarsystem",
+    "moon",
+    "planet"
+  ],
+  "author": "jeremy",
+  "license": "CC-BY"
+}

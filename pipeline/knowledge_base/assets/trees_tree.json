@@ -1,0 +1,13 @@
+{
+  "id": "trees_tree",
+  "src": "/assets/meshes/trees/tree.glb",
+  "category": "trees",
+  "tags": [
+    "tree diagram",
+    "conifer",
+    "shrub",
+    "tree"
+  ],
+  "author": "Marc Sol\u00e0",
+  "license": "CC-BY"
+}

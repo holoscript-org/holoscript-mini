@@ -1,0 +1,14 @@
+{
+  "id": "vehicles_car_model",
+  "src": "/assets/meshes/vehicles/car_model.glb",
+  "category": "vehicles",
+  "tags": [
+    "lamborghini",
+    "sports car",
+    "racing",
+    "car",
+    "vehicle"
+  ],
+  "author": "Ignition Labs",
+  "license": "CC-BY"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "buildings_guard_tower",
+  "src": "/assets/meshes/buildings/guard_tower.glb",
+  "category": "buildings",
+  "tags": [
+    "water tower",
+    "tower",
+    "building"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

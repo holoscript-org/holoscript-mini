@@ -1,0 +1,1304 @@
+{
+  "avocado": {
+    "type": "object",
+    "asset_id": "abstract_Avocado",
+    "asset_src": "/assets/meshes/abstract/Avocado.glb",
+    "category": "abstract"
+  },
+  "abstract": {
+    "type": "object",
+    "asset_id": "abstract_Avocado",
+    "asset_src": "/assets/meshes/abstract/Avocado.glb",
+    "category": "abstract"
+  },
+  "crystal": {
+    "type": "object",
+    "asset_id": "abstract_Avocado",
+    "asset_src": "/assets/meshes/abstract/Avocado.glb",
+    "category": "abstract"
+  },
+  "gem": {
+    "type": "object",
+    "asset_id": "abstract_Avocado",
+    "asset_src": "/assets/meshes/abstract/Avocado.glb",
+    "category": "abstract"
+  },
+  "ring": {
+    "type": "object",
+    "asset_id": "abstract_Avocado",
+    "asset_src": "/assets/meshes/abstract/Avocado.glb",
+    "category": "abstract"
+  },
+  "banner": {
+    "type": "object",
+    "asset_id": "abstract_banner",
+    "asset_src": "/assets/meshes/abstract/banner.glb",
+    "category": "abstract"
+  },
+  "barrel": {
+    "type": "object",
+    "asset_id": "abstract_barrel",
+    "asset_src": "/assets/meshes/abstract/barrel.glb",
+    "category": "abstract"
+  },
+  "splatter": {
+    "type": "object",
+    "asset_id": "abstract_blood_splat",
+    "asset_src": "/assets/meshes/abstract/blood_splat.glb",
+    "category": "abstract"
+  },
+  "blood": {
+    "type": "object",
+    "asset_id": "abstract_blood_splat",
+    "asset_src": "/assets/meshes/abstract/blood_splat.glb",
+    "category": "abstract"
+  },
+  "character": {
+    "type": "object",
+    "asset_id": "abstract_character-human",
+    "asset_src": "/assets/meshes/abstract/character-human.glb",
+    "category": "abstract"
+  },
+  "human": {
+    "type": "object",
+    "asset_id": "abstract_character-human",
+    "asset_src": "/assets/meshes/abstract/character-human.glb",
+    "category": "abstract"
+  },
+  "orc": {
+    "type": "object",
+    "asset_id": "abstract_character-orc",
+    "asset_src": "/assets/meshes/abstract/character-orc.glb",
+    "category": "abstract"
+  },
+  "chest": {
+    "type": "object",
+    "asset_id": "abstract_chest",
+    "asset_src": "/assets/meshes/abstract/chest.glb",
+    "category": "abstract"
+  },
+  "coin": {
+    "type": "object",
+    "asset_id": "abstract_coin",
+    "asset_src": "/assets/meshes/abstract/coin.glb",
+    "category": "abstract"
+  },
+  "mineral": {
+    "type": "object",
+    "asset_id": "abstract_crystal",
+    "asset_src": "/assets/meshes/abstract/crystal.glb",
+    "category": "abstract"
+  },
+  "quartz": {
+    "type": "object",
+    "asset_id": "abstract_crystal",
+    "asset_src": "/assets/meshes/abstract/crystal.glb",
+    "category": "abstract"
+  },
+  "lechatelierite": {
+    "type": "object",
+    "asset_id": "abstract_crystals",
+    "asset_src": "/assets/meshes/abstract/crystals.glb",
+    "category": "abstract"
+  },
+  "quartz glass": {
+    "type": "object",
+    "asset_id": "abstract_crystals",
+    "asset_src": "/assets/meshes/abstract/crystals.glb",
+    "category": "abstract"
+  },
+  "glass": {
+    "type": "object",
+    "asset_id": "abstract_crystals",
+    "asset_src": "/assets/meshes/abstract/crystals.glb",
+    "category": "abstract"
+  },
+  "diamonds": {
+    "type": "object",
+    "asset_id": "abstract_diamond_solitaire_ring",
+    "asset_src": "/assets/meshes/abstract/diamond_solitaire_ring.glb",
+    "category": "abstract"
+  },
+  "baguette": {
+    "type": "object",
+    "asset_id": "abstract_diamond_solitaire_ring",
+    "asset_src": "/assets/meshes/abstract/diamond_solitaire_ring.glb",
+    "category": "abstract"
+  },
+  "marquise": {
+    "type": "object",
+    "asset_id": "abstract_diamond_solitaire_ring",
+    "asset_src": "/assets/meshes/abstract/diamond_solitaire_ring.glb",
+    "category": "abstract"
+  },
+  "dragon": {
+    "type": "object",
+    "asset_id": "abstract_dragon_rigged",
+    "asset_src": "/assets/meshes/abstract/dragon_rigged.glb",
+    "category": "abstract"
+  },
+  "fantasy": {
+    "type": "object",
+    "asset_id": "abstract_dragon_rigged",
+    "asset_src": "/assets/meshes/abstract/dragon_rigged.glb",
+    "category": "abstract"
+  },
+  "enemy": {
+    "type": "object",
+    "asset_id": "abstract_dragon_rigged",
+    "asset_src": "/assets/meshes/abstract/dragon_rigged.glb",
+    "category": "abstract"
+  },
+  "boss": {
+    "type": "object",
+    "asset_id": "abstract_dragon_rigged",
+    "asset_src": "/assets/meshes/abstract/dragon_rigged.glb",
+    "category": "abstract"
+  },
+  "circle": {
+    "type": "object",
+    "asset_id": "abstract_drone_with_orb",
+    "asset_src": "/assets/meshes/abstract/drone_with_orb.glb",
+    "category": "abstract"
+  },
+  "circles": {
+    "type": "object",
+    "asset_id": "abstract_drone_with_orb",
+    "asset_src": "/assets/meshes/abstract/drone_with_orb.glb",
+    "category": "abstract"
+  },
+  "globe": {
+    "type": "object",
+    "asset_id": "abstract_drone_with_orb",
+    "asset_src": "/assets/meshes/abstract/drone_with_orb.glb",
+    "category": "abstract"
+  },
+  "orb": {
+    "type": "object",
+    "asset_id": "abstract_drone_with_orb",
+    "asset_src": "/assets/meshes/abstract/drone_with_orb.glb",
+    "category": "abstract"
+  },
+  "gemstone": {
+    "type": "object",
+    "asset_id": "abstract_gem",
+    "asset_src": "/assets/meshes/abstract/gem.glb",
+    "category": "abstract"
+  },
+  "ward": {
+    "type": "object",
+    "asset_id": "abstract_gradd_hospital_room",
+    "asset_src": "/assets/meshes/abstract/gradd_hospital_room.glb",
+    "category": "abstract"
+  },
+  "surgery": {
+    "type": "object",
+    "asset_id": "abstract_gradd_hospital_room",
+    "asset_src": "/assets/meshes/abstract/gradd_hospital_room.glb",
+    "category": "abstract"
+  },
+  "medical": {
+    "type": "object",
+    "asset_id": "abstract_gradd_hospital_room",
+    "asset_src": "/assets/meshes/abstract/gradd_hospital_room.glb",
+    "category": "abstract"
+  },
+  "heaven": {
+    "type": "object",
+    "asset_id": "abstract_halo",
+    "asset_src": "/assets/meshes/abstract/halo.glb",
+    "category": "abstract"
+  },
+  "angel": {
+    "type": "object",
+    "asset_id": "abstract_halo",
+    "asset_src": "/assets/meshes/abstract/halo.glb",
+    "category": "abstract"
+  },
+  "icon": {
+    "type": "object",
+    "asset_id": "abstract_heart",
+    "asset_src": "/assets/meshes/abstract/heart.glb",
+    "category": "abstract"
+  },
+  "heart": {
+    "type": "object",
+    "asset_id": "abstract_heart",
+    "asset_src": "/assets/meshes/abstract/heart.glb",
+    "category": "abstract"
+  },
+  "organ": {
+    "type": "object",
+    "asset_id": "abstract_heart_1",
+    "asset_src": "/assets/meshes/abstract/heart_1.glb",
+    "category": "abstract"
+  },
+  "pump": {
+    "type": "object",
+    "asset_id": "abstract_heart_1",
+    "asset_src": "/assets/meshes/abstract/heart_1.glb",
+    "category": "abstract"
+  },
+  "human heart": {
+    "type": "object",
+    "asset_id": "abstract_heart_1",
+    "asset_src": "/assets/meshes/abstract/heart_1.glb",
+    "category": "abstract"
+  },
+  "cardiovascular": {
+    "type": "object",
+    "asset_id": "abstract_heart_2",
+    "asset_src": "/assets/meshes/abstract/heart_2.glb",
+    "category": "abstract"
+  },
+  "circulatory": {
+    "type": "object",
+    "asset_id": "abstract_heart_3",
+    "asset_src": "/assets/meshes/abstract/heart_3.glb",
+    "category": "abstract"
+  },
+  "cardiac": {
+    "type": "object",
+    "asset_id": "abstract_heart_4",
+    "asset_src": "/assets/meshes/abstract/heart_4.glb",
+    "category": "abstract"
+  },
+  "accessories": {
+    "type": "object",
+    "asset_id": "abstract_jewel",
+    "asset_src": "/assets/meshes/abstract/jewel.glb",
+    "category": "abstract"
+  },
+  "jewelry": {
+    "type": "object",
+    "asset_id": "abstract_jewel",
+    "asset_src": "/assets/meshes/abstract/jewel.glb",
+    "category": "abstract"
+  },
+  "ornament": {
+    "type": "object",
+    "asset_id": "abstract_jewel",
+    "asset_src": "/assets/meshes/abstract/jewel.glb",
+    "category": "abstract"
+  },
+  "lantern": {
+    "type": "object",
+    "asset_id": "abstract_Lantern",
+    "asset_src": "/assets/meshes/abstract/Lantern.glb",
+    "category": "abstract"
+  },
+  "skeleton": {
+    "type": "object",
+    "asset_id": "abstract_lkn",
+    "asset_src": "/assets/meshes/abstract/lkn.glb",
+    "category": "abstract"
+  },
+  "bones": {
+    "type": "object",
+    "asset_id": "abstract_lkn",
+    "asset_src": "/assets/meshes/abstract/lkn.glb",
+    "category": "abstract"
+  },
+  "anatomy": {
+    "type": "object",
+    "asset_id": "abstract_lkn",
+    "asset_src": "/assets/meshes/abstract/lkn.glb",
+    "category": "abstract"
+  },
+  "human anatomy": {
+    "type": "object",
+    "asset_id": "abstract_lkn_1",
+    "asset_src": "/assets/meshes/abstract/lkn_1.glb",
+    "category": "abstract"
+  },
+  "jewellery": {
+    "type": "object",
+    "asset_id": "abstract_ring",
+    "asset_src": "/assets/meshes/abstract/ring.glb",
+    "category": "abstract"
+  },
+  "tech": {
+    "type": "object",
+    "asset_id": "abstract_system_unit",
+    "asset_src": "/assets/meshes/abstract/system_unit.glb",
+    "category": "abstract"
+  },
+  "system": {
+    "type": "object",
+    "asset_id": "abstract_system_unit",
+    "asset_src": "/assets/meshes/abstract/system_unit.glb",
+    "category": "abstract"
+  },
+  "house": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "town house": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "town": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "building": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "buildings": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "tower": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "skyscraper": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "structure": {
+    "type": "object",
+    "asset_id": "buildings_apartment_building",
+    "asset_src": "/assets/meshes/buildings/apartment_building.glb",
+    "category": "buildings"
+  },
+  "bridge": {
+    "type": "object",
+    "asset_id": "buildings_bridge-pillar-wide",
+    "asset_src": "/assets/meshes/buildings/bridge-pillar-wide.glb",
+    "category": "buildings"
+  },
+  "pillar": {
+    "type": "object",
+    "asset_id": "buildings_bridge-pillar-wide",
+    "asset_src": "/assets/meshes/buildings/bridge-pillar-wide.glb",
+    "category": "buildings"
+  },
+  "wide": {
+    "type": "object",
+    "asset_id": "buildings_bridge-pillar-wide",
+    "asset_src": "/assets/meshes/buildings/bridge-pillar-wide.glb",
+    "category": "buildings"
+  },
+  "asset pack": {
+    "type": "object",
+    "asset_id": "buildings_castle_kit",
+    "asset_src": "/assets/meshes/buildings/castle_kit.glb",
+    "category": "buildings"
+  },
+  "asset": {
+    "type": "object",
+    "asset_id": "buildings_castle_kit",
+    "asset_src": "/assets/meshes/buildings/castle_kit.glb",
+    "category": "buildings"
+  },
+  "pack": {
+    "type": "object",
+    "asset_id": "buildings_castle_kit",
+    "asset_src": "/assets/meshes/buildings/castle_kit.glb",
+    "category": "buildings"
+  },
+  "castle": {
+    "type": "object",
+    "asset_id": "buildings_castle_kit",
+    "asset_src": "/assets/meshes/buildings/castle_kit.glb",
+    "category": "buildings"
+  },
+  "construction": {
+    "type": "object",
+    "asset_id": "buildings_construction-barrier",
+    "asset_src": "/assets/meshes/buildings/construction-barrier.glb",
+    "category": "buildings"
+  },
+  "barrier": {
+    "type": "object",
+    "asset_id": "buildings_construction-barrier",
+    "asset_src": "/assets/meshes/buildings/construction-barrier.glb",
+    "category": "buildings"
+  },
+  "cone": {
+    "type": "object",
+    "asset_id": "buildings_construction-cone",
+    "asset_src": "/assets/meshes/buildings/construction-cone.glb",
+    "category": "buildings"
+  },
+  "light": {
+    "type": "object",
+    "asset_id": "buildings_construction-light",
+    "asset_src": "/assets/meshes/buildings/construction-light.glb",
+    "category": "buildings"
+  },
+  "pen": {
+    "type": "object",
+    "asset_id": "buildings_farm_house",
+    "asset_src": "/assets/meshes/buildings/farm_house.glb",
+    "category": "buildings"
+  },
+  "sty": {
+    "type": "object",
+    "asset_id": "buildings_farm_house",
+    "asset_src": "/assets/meshes/buildings/farm_house.glb",
+    "category": "buildings"
+  },
+  "home": {
+    "type": "object",
+    "asset_id": "buildings_farm_house",
+    "asset_src": "/assets/meshes/buildings/farm_house.glb",
+    "category": "buildings"
+  },
+  "water tower": {
+    "type": "object",
+    "asset_id": "buildings_guard_tower",
+    "asset_src": "/assets/meshes/buildings/guard_tower.glb",
+    "category": "buildings"
+  },
+  "water": {
+    "type": "object",
+    "asset_id": "buildings_guard_tower",
+    "asset_src": "/assets/meshes/buildings/guard_tower.glb",
+    "category": "buildings"
+  },
+  "abode": {
+    "type": "object",
+    "asset_id": "buildings_house",
+    "asset_src": "/assets/meshes/buildings/house.glb",
+    "category": "buildings"
+  },
+  "dwelling": {
+    "type": "object",
+    "asset_id": "buildings_house",
+    "asset_src": "/assets/meshes/buildings/house.glb",
+    "category": "buildings"
+  },
+  "rooms": {
+    "type": "object",
+    "asset_id": "buildings_house_interior",
+    "asset_src": "/assets/meshes/buildings/house_interior.glb",
+    "category": "buildings"
+  },
+  "urban": {
+    "type": "object",
+    "asset_id": "buildings_large_building",
+    "asset_src": "/assets/meshes/buildings/large_building.glb",
+    "category": "buildings"
+  },
+  "office building": {
+    "type": "object",
+    "asset_id": "buildings_large_building",
+    "asset_src": "/assets/meshes/buildings/large_building.glb",
+    "category": "buildings"
+  },
+  "office": {
+    "type": "object",
+    "asset_id": "buildings_large_building",
+    "asset_src": "/assets/meshes/buildings/large_building.glb",
+    "category": "buildings"
+  },
+  "city": {
+    "type": "structure",
+    "generator": "grid",
+    "asset_category": "buildings",
+    "count": [
+      9,
+      16
+    ],
+    "spacing": 3.5
+  },
+  "curved": {
+    "type": "object",
+    "asset_id": "buildings_light-curved-cross",
+    "asset_src": "/assets/meshes/buildings/light-curved-cross.glb",
+    "category": "buildings"
+  },
+  "cross": {
+    "type": "object",
+    "asset_id": "buildings_light-curved-cross",
+    "asset_src": "/assets/meshes/buildings/light-curved-cross.glb",
+    "category": "buildings"
+  },
+  "primitives": {
+    "type": "object",
+    "asset_id": "buildings_skyscraper",
+    "asset_src": "/assets/meshes/buildings/skyscraper.glb",
+    "category": "buildings"
+  },
+  "high-rise": {
+    "type": "object",
+    "asset_id": "buildings_skyscraper",
+    "asset_src": "/assets/meshes/buildings/skyscraper.glb",
+    "category": "buildings"
+  },
+  "high": {
+    "type": "object",
+    "asset_id": "buildings_skyscraper",
+    "asset_src": "/assets/meshes/buildings/skyscraper.glb",
+    "category": "buildings"
+  },
+  "rise": {
+    "type": "object",
+    "asset_id": "buildings_skyscraper",
+    "asset_src": "/assets/meshes/buildings/skyscraper.glb",
+    "category": "buildings"
+  },
+  "hulk": {
+    "type": "object",
+    "asset_id": "buildings_tower",
+    "asset_src": "/assets/meshes/buildings/tower.glb",
+    "category": "buildings"
+  },
+  "column": {
+    "type": "object",
+    "asset_id": "buildings_tower",
+    "asset_src": "/assets/meshes/buildings/tower.glb",
+    "category": "buildings"
+  },
+  "person": {
+    "type": "object",
+    "asset_id": "humans_adventurer",
+    "asset_src": "/assets/meshes/humans/adventurer.glb",
+    "category": "humans"
+  },
+  "man": {
+    "type": "object",
+    "asset_id": "humans_adventurer",
+    "asset_src": "/assets/meshes/humans/adventurer.glb",
+    "category": "humans"
+  },
+  "humans": {
+    "type": "object",
+    "asset_id": "humans_adventurer",
+    "asset_src": "/assets/meshes/humans/adventurer.glb",
+    "category": "humans"
+  },
+  "figure": {
+    "type": "object",
+    "asset_id": "humans_adventurer",
+    "asset_src": "/assets/meshes/humans/adventurer.glb",
+    "category": "humans"
+  },
+  "template": {
+    "type": "object",
+    "asset_id": "humans_animated_character_base",
+    "asset_src": "/assets/meshes/humans/animated_character_base.glb",
+    "category": "humans"
+  },
+  "human figure": {
+    "type": "object",
+    "asset_id": "humans_animated_character_base",
+    "asset_src": "/assets/meshes/humans/animated_character_base.glb",
+    "category": "humans"
+  },
+  "cesiumman": {
+    "type": "object",
+    "asset_id": "humans_CesiumMan",
+    "asset_src": "/assets/meshes/humans/CesiumMan.glb",
+    "category": "humans"
+  },
+  "hero": {
+    "type": "object",
+    "asset_id": "humans_character_animated",
+    "asset_src": "/assets/meshes/humans/character_animated.glb",
+    "category": "humans"
+  },
+  "rpg": {
+    "type": "object",
+    "asset_id": "humans_character_animated",
+    "asset_src": "/assets/meshes/humans/character_animated.glb",
+    "category": "humans"
+  },
+  "asteroid": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "space": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "rock": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "planet": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "planets": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "world": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "moon": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "star": {
+    "type": "object",
+    "asset_id": "planets_asteroid",
+    "asset_src": "/assets/meshes/planets/asteroid.glb",
+    "category": "planets"
+  },
+  "planetoid": {
+    "type": "object",
+    "asset_id": "planets_asteroids",
+    "asset_src": "/assets/meshes/planets/asteroids.glb",
+    "category": "planets"
+  },
+  "minor planet": {
+    "type": "object",
+    "asset_id": "planets_asteroids",
+    "asset_src": "/assets/meshes/planets/asteroids.glb",
+    "category": "planets"
+  },
+  "minor": {
+    "type": "object",
+    "asset_id": "planets_asteroids",
+    "asset_src": "/assets/meshes/planets/asteroids.glb",
+    "category": "planets"
+  },
+  "sphere": {
+    "type": "object",
+    "asset_id": "planets_earth",
+    "asset_src": "/assets/meshes/planets/earth.glb",
+    "category": "planets"
+  },
+  "astronomy": {
+    "type": "object",
+    "asset_id": "planets_moon",
+    "asset_src": "/assets/meshes/planets/moon.glb",
+    "category": "planets"
+  },
+  "solarsystem": {
+    "type": "object",
+    "asset_id": "planets_moon",
+    "asset_src": "/assets/meshes/planets/moon.glb",
+    "category": "planets"
+  },
+  "jupiter": {
+    "type": "object",
+    "asset_id": "planets_planet",
+    "asset_src": "/assets/meshes/planets/planet.glb",
+    "category": "planets"
+  },
+  "mercury": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "venus": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "earth": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "mars": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "saturn": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "uranus": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "neptune": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "pluto": {
+    "type": "object",
+    "asset_id": "planets_planets",
+    "asset_src": "/assets/meshes/planets/planets.glb",
+    "category": "planets"
+  },
+  "galaxy": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "spacecraft": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "satellite": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "satellites": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "probe": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "station": {
+    "type": "object",
+    "asset_id": "satellites_asteroid",
+    "asset_src": "/assets/meshes/satellites/asteroid.glb",
+    "category": "satellites"
+  },
+  "space station": {
+    "type": "object",
+    "asset_id": "satellites_international_space_station",
+    "asset_src": "/assets/meshes/satellites/international_space_station.glb",
+    "category": "satellites"
+  },
+  "orbit": {
+    "type": "effect",
+    "handler": "anim_orbit"
+  },
+  "radio": {
+    "type": "object",
+    "asset_id": "satellites_satellite_dish",
+    "asset_src": "/assets/meshes/satellites/satellite_dish.glb",
+    "category": "satellites"
+  },
+  "signal": {
+    "type": "object",
+    "asset_id": "satellites_satellite_dish",
+    "asset_src": "/assets/meshes/satellites/satellite_dish.glb",
+    "category": "satellites"
+  },
+  "space ship": {
+    "type": "object",
+    "asset_id": "satellites_scifi_kit",
+    "asset_src": "/assets/meshes/satellites/scifi_kit.glb",
+    "category": "satellites"
+  },
+  "ship": {
+    "type": "object",
+    "asset_id": "satellites_scifi_kit",
+    "asset_src": "/assets/meshes/satellites/scifi_kit.glb",
+    "category": "satellites"
+  },
+  "bases": {
+    "type": "object",
+    "asset_id": "satellites_scifi_kit",
+    "asset_src": "/assets/meshes/satellites/scifi_kit.glb",
+    "category": "satellites"
+  },
+  "starship": {
+    "type": "object",
+    "asset_id": "satellites_spaceship",
+    "asset_src": "/assets/meshes/satellites/spaceship.glb",
+    "category": "satellites"
+  },
+  "spaceship": {
+    "type": "object",
+    "asset_id": "satellites_spaceship",
+    "asset_src": "/assets/meshes/satellites/spaceship.glb",
+    "category": "satellites"
+  },
+  "astronaut": {
+    "type": "object",
+    "asset_id": "satellites_spaceship",
+    "asset_src": "/assets/meshes/satellites/spaceship.glb",
+    "category": "satellites"
+  },
+  "skylab": {
+    "type": "object",
+    "asset_id": "satellites_wikiplanet_space_station_wss",
+    "asset_src": "/assets/meshes/satellites/wikiplanet_space_station_wss.glb",
+    "category": "satellites"
+  },
+  "iss": {
+    "type": "object",
+    "asset_id": "satellites_wikiplanet_space_station_wss",
+    "asset_src": "/assets/meshes/satellites/wikiplanet_space_station_wss.glb",
+    "category": "satellites"
+  },
+  "midway": {
+    "type": "object",
+    "asset_id": "satellites_wikiplanet_space_station_wss",
+    "asset_src": "/assets/meshes/satellites/wikiplanet_space_station_wss.glb",
+    "category": "satellites"
+  },
+  "bed": {
+    "type": "object",
+    "asset_id": "trees_bed",
+    "asset_src": "/assets/meshes/trees/bed.glb",
+    "category": "trees"
+  },
+  "trees": {
+    "type": "object",
+    "asset_id": "trees_bed",
+    "asset_src": "/assets/meshes/trees/bed.glb",
+    "category": "trees"
+  },
+  "tree": {
+    "type": "object",
+    "asset_id": "trees_bed",
+    "asset_src": "/assets/meshes/trees/bed.glb",
+    "category": "trees"
+  },
+  "plant": {
+    "type": "object",
+    "asset_id": "trees_bed",
+    "asset_src": "/assets/meshes/trees/bed.glb",
+    "category": "trees"
+  },
+  "forest": {
+    "type": "structure",
+    "generator": "scatter",
+    "asset_category": "trees",
+    "count": [
+      8,
+      16
+    ],
+    "radius": 12
+  },
+  "floor": {
+    "type": "object",
+    "asset_id": "trees_bed_floor",
+    "asset_src": "/assets/meshes/trees/bed_floor.glb",
+    "category": "trees"
+  },
+  "center": {
+    "type": "object",
+    "asset_id": "trees_bridge_center_stone",
+    "asset_src": "/assets/meshes/trees/bridge_center_stone.glb",
+    "category": "trees"
+  },
+  "stone": {
+    "type": "object",
+    "asset_id": "trees_bridge_center_stone",
+    "asset_src": "/assets/meshes/trees/bridge_center_stone.glb",
+    "category": "trees"
+  },
+  "stoneround": {
+    "type": "object",
+    "asset_id": "trees_bridge_center_stoneRound",
+    "asset_src": "/assets/meshes/trees/bridge_center_stoneRound.glb",
+    "category": "trees"
+  },
+  "wood": {
+    "type": "object",
+    "asset_id": "trees_bridge_center_wood",
+    "asset_src": "/assets/meshes/trees/bridge_center_wood.glb",
+    "category": "trees"
+  },
+  "woodround": {
+    "type": "object",
+    "asset_id": "trees_bridge_center_woodRound",
+    "asset_src": "/assets/meshes/trees/bridge_center_woodRound.glb",
+    "category": "trees"
+  },
+  "pot": {
+    "type": "object",
+    "asset_id": "trees_fiddle-leaf_plant",
+    "asset_src": "/assets/meshes/trees/fiddle-leaf_plant.glb",
+    "category": "trees"
+  },
+  "leaves": {
+    "type": "object",
+    "asset_id": "trees_fiddle-leaf_plant",
+    "asset_src": "/assets/meshes/trees/fiddle-leaf_plant.glb",
+    "category": "trees"
+  },
+  "foliage": {
+    "type": "object",
+    "asset_id": "trees_fiddle-leaf_plant",
+    "asset_src": "/assets/meshes/trees/fiddle-leaf_plant.glb",
+    "category": "trees"
+  },
+  "palm tree": {
+    "type": "object",
+    "asset_id": "trees_palm_tree",
+    "asset_src": "/assets/meshes/trees/palm_tree.glb",
+    "category": "trees"
+  },
+  "palm": {
+    "type": "object",
+    "asset_id": "trees_palm_tree",
+    "asset_src": "/assets/meshes/trees/palm_tree.glb",
+    "category": "trees"
+  },
+  "leaf": {
+    "type": "object",
+    "asset_id": "trees_palm_tree",
+    "asset_src": "/assets/meshes/trees/palm_tree.glb",
+    "category": "trees"
+  },
+  "evergreen": {
+    "type": "object",
+    "asset_id": "trees_pine",
+    "asset_src": "/assets/meshes/trees/pine.glb",
+    "category": "trees"
+  },
+  "pine tree": {
+    "type": "object",
+    "asset_id": "trees_pine",
+    "asset_src": "/assets/meshes/trees/pine.glb",
+    "category": "trees"
+  },
+  "pine": {
+    "type": "object",
+    "asset_id": "trees_pine",
+    "asset_src": "/assets/meshes/trees/pine.glb",
+    "category": "trees"
+  },
+  "true pine": {
+    "type": "object",
+    "asset_id": "trees_pine_tree",
+    "asset_src": "/assets/meshes/trees/pine_tree.glb",
+    "category": "trees"
+  },
+  "true": {
+    "type": "object",
+    "asset_id": "trees_pine_tree",
+    "asset_src": "/assets/meshes/trees/pine_tree.glb",
+    "category": "trees"
+  },
+  "conifer": {
+    "type": "object",
+    "asset_id": "trees_pine_trees",
+    "asset_src": "/assets/meshes/trees/pine_trees.glb",
+    "category": "trees"
+  },
+  "pea": {
+    "type": "object",
+    "asset_id": "trees_plant_-_white_pot",
+    "asset_src": "/assets/meshes/trees/plant_-_white_pot.glb",
+    "category": "trees"
+  },
+  "bloodroot": {
+    "type": "object",
+    "asset_id": "trees_plant_-_white_pot",
+    "asset_src": "/assets/meshes/trees/plant_-_white_pot.glb",
+    "category": "trees"
+  },
+  "onion": {
+    "type": "object",
+    "asset_id": "trees_plant_-_white_pot",
+    "asset_src": "/assets/meshes/trees/plant_-_white_pot.glb",
+    "category": "trees"
+  },
+  "talipot": {
+    "type": "object",
+    "asset_id": "trees_queen_palm_tree",
+    "asset_src": "/assets/meshes/trees/queen_palm_tree.glb",
+    "category": "trees"
+  },
+  "date": {
+    "type": "object",
+    "asset_id": "trees_queen_palm_tree",
+    "asset_src": "/assets/meshes/trees/queen_palm_tree.glb",
+    "category": "trees"
+  },
+  "cycas": {
+    "type": "object",
+    "asset_id": "trees_queen_palm_tree",
+    "asset_src": "/assets/meshes/trees/queen_palm_tree.glb",
+    "category": "trees"
+  },
+  "tree diagram": {
+    "type": "object",
+    "asset_id": "trees_tree",
+    "asset_src": "/assets/meshes/trees/tree.glb",
+    "category": "trees"
+  },
+  "diagram": {
+    "type": "object",
+    "asset_id": "trees_tree",
+    "asset_src": "/assets/meshes/trees/tree.glb",
+    "category": "trees"
+  },
+  "shrub": {
+    "type": "object",
+    "asset_id": "trees_tree",
+    "asset_src": "/assets/meshes/trees/tree.glb",
+    "category": "trees"
+  },
+  "green": {
+    "type": "object",
+    "asset_id": "trees_trees",
+    "asset_src": "/assets/meshes/trees/trees.glb",
+    "category": "trees"
+  },
+  "ambulance": {
+    "type": "object",
+    "asset_id": "vehicles_ambulance",
+    "asset_src": "/assets/meshes/vehicles/ambulance.glb",
+    "category": "vehicles"
+  },
+  "vehicles": {
+    "type": "object",
+    "asset_id": "vehicles_ambulance",
+    "asset_src": "/assets/meshes/vehicles/ambulance.glb",
+    "category": "vehicles"
+  },
+  "vehicle": {
+    "type": "object",
+    "asset_id": "vehicles_ambulance",
+    "asset_src": "/assets/meshes/vehicles/ambulance.glb",
+    "category": "vehicles"
+  },
+  "car": {
+    "type": "object",
+    "asset_id": "vehicles_ambulance",
+    "asset_src": "/assets/meshes/vehicles/ambulance.glb",
+    "category": "vehicles"
+  },
+  "truck": {
+    "type": "object",
+    "asset_id": "vehicles_ambulance",
+    "asset_src": "/assets/meshes/vehicles/ambulance.glb",
+    "category": "vehicles"
+  },
+  "box": {
+    "type": "object",
+    "asset_id": "vehicles_box",
+    "asset_src": "/assets/meshes/vehicles/box.glb",
+    "category": "vehicles"
+  },
+  "automobile": {
+    "type": "object",
+    "asset_id": "vehicles_car",
+    "asset_src": "/assets/meshes/vehicles/car.glb",
+    "category": "vehicles"
+  },
+  "driving": {
+    "type": "object",
+    "asset_id": "vehicles_car",
+    "asset_src": "/assets/meshes/vehicles/car.glb",
+    "category": "vehicles"
+  },
+  "lamborghini": {
+    "type": "object",
+    "asset_id": "vehicles_car_model",
+    "asset_src": "/assets/meshes/vehicles/car_model.glb",
+    "category": "vehicles"
+  },
+  "sports car": {
+    "type": "object",
+    "asset_id": "vehicles_car_model",
+    "asset_src": "/assets/meshes/vehicles/car_model.glb",
+    "category": "vehicles"
+  },
+  "sports": {
+    "type": "object",
+    "asset_id": "vehicles_car_model",
+    "asset_src": "/assets/meshes/vehicles/car_model.glb",
+    "category": "vehicles"
+  },
+  "racing": {
+    "type": "object",
+    "asset_id": "vehicles_car_model",
+    "asset_src": "/assets/meshes/vehicles/car_model.glb",
+    "category": "vehicles"
+  },
+  "camaro": {
+    "type": "object",
+    "asset_id": "vehicles_chevrolet_camaro",
+    "asset_src": "/assets/meshes/vehicles/chevrolet_camaro.glb",
+    "category": "vehicles"
+  },
+  "chevrolet": {
+    "type": "object",
+    "asset_id": "vehicles_chevrolet_camaro",
+    "asset_src": "/assets/meshes/vehicles/chevrolet_camaro.glb",
+    "category": "vehicles"
+  },
+  "flat": {
+    "type": "object",
+    "asset_id": "vehicles_cone-flat",
+    "asset_src": "/assets/meshes/vehicles/cone-flat.glb",
+    "category": "vehicles"
+  },
+  "debris": {
+    "type": "object",
+    "asset_id": "vehicles_debris-bolt",
+    "asset_src": "/assets/meshes/vehicles/debris-bolt.glb",
+    "category": "vehicles"
+  },
+  "bolt": {
+    "type": "object",
+    "asset_id": "vehicles_debris-bolt",
+    "asset_src": "/assets/meshes/vehicles/debris-bolt.glb",
+    "category": "vehicles"
+  },
+  "bumper": {
+    "type": "object",
+    "asset_id": "vehicles_debris-bumper",
+    "asset_src": "/assets/meshes/vehicles/debris-bumper.glb",
+    "category": "vehicles"
+  },
+  "transportation": {
+    "type": "object",
+    "asset_id": "vehicles_police_car",
+    "asset_src": "/assets/meshes/vehicles/police_car.glb",
+    "category": "vehicles"
+  },
+  "police car": {
+    "type": "object",
+    "asset_id": "vehicles_police_car",
+    "asset_src": "/assets/meshes/vehicles/police_car.glb",
+    "category": "vehicles"
+  },
+  "police": {
+    "type": "object",
+    "asset_id": "vehicles_police_car",
+    "asset_src": "/assets/meshes/vehicles/police_car.glb",
+    "category": "vehicles"
+  },
+  "red": {
+    "type": "object",
+    "asset_id": "vehicles_red_car",
+    "asset_src": "/assets/meshes/vehicles/red_car.glb",
+    "category": "vehicles"
+  },
+  "red car": {
+    "type": "object",
+    "asset_id": "vehicles_red_car",
+    "asset_src": "/assets/meshes/vehicles/red_car.glb",
+    "category": "vehicles"
+  },
+  "rocket": {
+    "type": "object",
+    "asset_id": "vehicles_rocketship",
+    "asset_src": "/assets/meshes/vehicles/rocketship.glb",
+    "category": "vehicles"
+  },
+  "rocketship": {
+    "type": "object",
+    "asset_id": "vehicles_space_shuttle",
+    "asset_src": "/assets/meshes/vehicles/space_shuttle.glb",
+    "category": "vehicles"
+  },
+  "aircraft": {
+    "type": "object",
+    "asset_id": "vehicles_spaceship",
+    "asset_src": "/assets/meshes/vehicles/spaceship.glb",
+    "category": "vehicles"
+  },
+  "airplane": {
+    "type": "object",
+    "asset_id": "vehicles_spaceship",
+    "asset_src": "/assets/meshes/vehicles/spaceship.glb",
+    "category": "vehicles"
+  },
+  "toycar": {
+    "type": "object",
+    "asset_id": "vehicles_ToyCar",
+    "asset_src": "/assets/meshes/vehicles/ToyCar.glb",
+    "category": "vehicles"
+  },
+  "crowd": {
+    "type": "structure",
+    "generator": "scatter",
+    "asset_category": "humans",
+    "count": [
+      6,
+      12
+    ],
+    "radius": 8
+  },
+  "fleet": {
+    "type": "structure",
+    "generator": "scatter",
+    "asset_category": "vehicles",
+    "count": [
+      4,
+      8
+    ],
+    "radius": 10
+  },
+  "solar_system": {
+    "type": "system",
+    "generator": "orbit_cluster",
+    "central_category": "planets",
+    "satellite_category": "planets",
+    "count": [
+      4,
+      8
+    ]
+  },
+  "atom": {
+    "type": "system",
+    "generator": "orbit_cluster",
+    "central_category": "abstract",
+    "satellite_category": "abstract",
+    "count": [
+      3,
+      6
+    ]
+  },
+  "spin": {
+    "type": "effect",
+    "handler": "anim_spin"
+  },
+  "rotate": {
+    "type": "effect",
+    "handler": "anim_spin"
+  },
+  "revolve": {
+    "type": "effect",
+    "handler": "anim_orbit"
+  },
+  "float": {
+    "type": "effect",
+    "handler": "anim_spin"
+  },
+  "hover": {
+    "type": "effect",
+    "handler": "anim_spin"
+  }
+}

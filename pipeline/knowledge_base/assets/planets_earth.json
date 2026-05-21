@@ -1,0 +1,13 @@
+{
+  "id": "planets_earth",
+  "src": "/assets/meshes/planets/earth.glb",
+  "category": "planets",
+  "tags": [
+    "world",
+    "globe",
+    "sphere",
+    "planet"
+  ],
+  "author": "Zoe XR",
+  "license": "CC-BY"
+}

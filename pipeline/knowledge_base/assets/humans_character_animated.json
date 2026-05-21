@@ -1,0 +1,14 @@
+{
+  "id": "humans_character_animated",
+  "src": "/assets/meshes/humans/character_animated.glb",
+  "category": "humans",
+  "tags": [
+    "hero",
+    "rpg",
+    "human",
+    "man",
+    "character"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

@@ -226,12 +226,6 @@ renderer/dev/
 # Core generated outputs (written at runtime by Member 1)
 core/outputs/scene_grammar.json
 
-# Member 1 generated assets / knowledge base
-core/assets/meshes/**/*.glb
-core/assets/hdri/**/*.hdr
-pipeline/knowledge_base/assets/*.json
-pipeline/knowledge_base/concept_map.json
-pipeline/knowledge_base/concept_descriptions.json
 
 # Root-level grammar artifact (superseded by core/outputs/)
 /scene_grammar.json

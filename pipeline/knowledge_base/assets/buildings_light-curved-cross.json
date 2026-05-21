@@ -1,0 +1,14 @@
+{
+  "id": "buildings_light-curved-cross",
+  "src": "/assets/meshes/buildings/light-curved-cross.glb",
+  "category": "buildings",
+  "tags": [
+    "light",
+    "curved",
+    "cross",
+    "buildings",
+    "building"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

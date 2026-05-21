@@ -1,0 +1,13 @@
+{
+  "id": "buildings_bridge-pillar",
+  "src": "/assets/meshes/buildings/bridge-pillar.glb",
+  "category": "buildings",
+  "tags": [
+    "bridge",
+    "pillar",
+    "buildings",
+    "building"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

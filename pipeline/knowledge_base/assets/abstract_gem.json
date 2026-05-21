@@ -1,0 +1,12 @@
+{
+  "id": "abstract_gem",
+  "src": "/assets/meshes/abstract/gem.glb",
+  "category": "abstract",
+  "tags": [
+    "gemstone",
+    "gem",
+    "abstract"
+  ],
+  "author": "Poly by Google",
+  "license": "CC-BY"
+}

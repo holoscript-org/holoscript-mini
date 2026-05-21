@@ -1,0 +1,12 @@
+{
+  "id": "abstract_character-orc",
+  "src": "/assets/meshes/abstract/character-orc.glb",
+  "category": "abstract",
+  "tags": [
+    "character",
+    "orc",
+    "abstract"
+  ],
+  "author": "Kenney",
+  "license": "CC0"
+}

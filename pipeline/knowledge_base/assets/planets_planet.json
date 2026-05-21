@@ -1,0 +1,12 @@
+{
+  "id": "planets_planet",
+  "src": "/assets/meshes/planets/planet.glb",
+  "category": "planets",
+  "tags": [
+    "sphere",
+    "jupiter",
+    "planet"
+  ],
+  "author": "Quaternius",
+  "license": "CC-BY"
+}

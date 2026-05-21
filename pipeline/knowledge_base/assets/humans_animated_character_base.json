@@ -1,0 +1,14 @@
+{
+  "id": "humans_animated_character_base",
+  "src": "/assets/meshes/humans/animated_character_base.glb",
+  "category": "humans",
+  "tags": [
+    "template",
+    "character",
+    "human",
+    "person",
+    "human figure"
+  ],
+  "author": "J-Toastie",
+  "license": "CC-BY"
+}
