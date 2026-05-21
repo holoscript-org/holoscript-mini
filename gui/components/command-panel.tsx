@@ -38,7 +38,7 @@ type SpeechRecognitionWindow = Window & {
 export function CommandPanel({
   onCommandSend,
 }: {
-  onCommandSend?: (command: string) => void
+  onCommandSend?: (command: string) => void | Promise<void>
 }) {
   const [inputValue, setInputValue] = useState("")
   const [commandHistory, setCommandHistory] = useState<CommandEntry[]>([
@@ -81,9 +81,27 @@ export function CommandPanel({
       recognitionRef.current.interimResults = false
 
       recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript
+        const transcript = event.results[0][0].transcript.trim()
         setInputValue(transcript)
         setIsListening(false)
+        // Auto-submit voice input immediately — no need to press Enter
+        if (transcript && onCommandSend) {
+          const userEntry: CommandEntry = {
+            id: Date.now().toString(),
+            text: transcript,
+            timestamp: new Date(),
+            type: "user",
+          }
+          setCommandHistory((prev) => [...prev, userEntry])
+          setTimeout(() => {
+            setCommandHistory((prev) => [
+              ...prev,
+              { id: (Date.now() + 1).toString(), text: `Processing: "${transcript}"`, timestamp: new Date(), type: "system" },
+            ])
+          }, 300)
+          setInputValue("")
+          void onCommandSend(transcript)
+        }
       }
 
       recognitionRef.current.onerror = () => {

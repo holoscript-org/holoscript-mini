@@ -93,23 +93,11 @@ def _build_prompt(
         if item.get("asset_src")
     ]
 
-    locked_entities = [
-        {
-            "id": obj.get("id"),
-            "concept_id": obj.get("concept_id"),
-            "model": obj.get("model"),
-            "semantic_locked": obj.get("semantic_locked", True),
-        }
-        for obj in base_scene.get("objects", [])
-        if isinstance(obj, dict)
-    ]
-
     payload = {
         "transcript": transcript,
         "semantic_intent": intent,
         "retrieved_assets": assets,
         "available_assets": available_assets,
-        "locked_entities": locked_entities,
         "style_hints": style_hints or _extract_style_hints(transcript),
         "base_scene": base_scene,
     }
@@ -145,23 +133,27 @@ def _merge_scene(base_scene: dict[str, Any], enhanced: dict[str, Any]) -> dict[s
         if obj_id in seen:
             continue
         base_obj = base_objects.get(obj_id)
-        if not base_obj:
-            # Enhancer is not allowed to introduce new objects.
-            continue
         if base_obj:
+            # Merge enhanced fields onto the base object
             merged = dict(base_obj)
             overrides = obj.get("materialOverrides") if isinstance(obj.get("materialOverrides"), dict) else None
             if overrides:
                 merged["material"] = _apply_material_overrides(merged.get("material"), overrides)
-            for key in ["material", "animation", "label"]:
-                if isinstance(obj.get(key), dict) or isinstance(obj.get(key), str):
-                    merged[key] = obj.get(key)
+            for key in ["material", "animation", "label", "position", "scale", "rotation", "geometry", "parent"]:
+                val = obj.get(key)
+                if val is not None:
+                    merged[key] = val
             if _is_valid_object(merged):
                 merged_objects.append(merged)
             else:
                 merged_objects.append(base_obj)
+        else:
+            # Groq introduced a new object — accept it if valid
+            if _is_valid_object(obj):
+                merged_objects.append(obj)
         seen.add(obj_id)
 
+    # Keep any base objects Groq did not mention
     for obj_id, obj in base_objects.items():
         if obj_id not in seen:
             merged_objects.append(obj)

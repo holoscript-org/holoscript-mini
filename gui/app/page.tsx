@@ -20,6 +20,7 @@ export default function HologramDashboard() {
     selectedScene,
     sceneOptions,
     setSelectedScene,
+    refreshFromBackend,
   } = useWebGLSceneData()
 
   // ── Drag-active ref — true only while PINCH is held after a selection exists ─
@@ -120,13 +121,49 @@ export default function HologramDashboard() {
     [setScale]
   )
 
-  // ── Command panel integration (text commands affect transforms) ───────────────
+  // ── Command panel integration — sends command to Member 1 pipeline ───────────
   const handleCommandSend = useCallback(
-    (command: string) => {
+    async (command: string) => {
       const cmd = command.toLowerCase()
-      if (cmd.includes("reset")) handleReset()
+      if (cmd === "reset" || cmd === "reset scene") {
+        handleReset()
+        return
+      }
+
+      try {
+        const res = await fetch("http://localhost:8000/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command }),
+        })
+        if (!res.ok) {
+          console.error("Pipeline command rejected:", res.status)
+          return
+        }
+
+        // Poll /command/status until the pipeline finishes, then refresh scene
+        const timer = setInterval(async () => {
+          try {
+            const statusRes = await fetch("http://localhost:8000/command/status", { cache: "no-store" })
+            const status = await statusRes.json() as { running: boolean; state: string }
+            if (!status.running) {
+              clearInterval(timer)
+              if (status.state === "done") {
+                await refreshFromBackend()
+              }
+            }
+          } catch {
+            clearInterval(timer)
+          }
+        }, 1500)
+
+        // Safety: stop polling after 60 s regardless
+        setTimeout(() => clearInterval(timer), 60_000)
+      } catch (err) {
+        console.error("Failed to send command to backend:", err)
+      }
     },
-    [handleReset]
+    [handleReset, refreshFromBackend]
   )
 
   return (

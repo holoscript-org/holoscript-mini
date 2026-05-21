@@ -1,42 +1,71 @@
 {
-  "name": "Starship",
+  "name": "Mediaeval Castle Surrounded by Lava",
   "objects": [
     {
-      "id": "starship",
+      "id": "castle",
       "type": "mesh",
       "position": [
-        6.56,
-        0.0,
-        0.0
+        0,
+        0,
+        0
       ],
       "material": {
         "type": "standard",
-        "color": "#888888",
-        "roughness": 0.6,
-        "metalness": 0.1
+        "color": "#ffffff",
+        "roughness": 0.5,
+        "metalness": 0.0
       },
       "animation": {
         "type": "none"
       },
-      "model": "/assets/meshes/satellites/spaceship.glb",
+      "model": "/assets/meshes/abstract/castle.glb",
       "scale": [
-        0.858,
-        0.858,
-        0.858
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "lava",
+      "type": "primitive",
+      "position": [
+        0,
+        -10,
+        0
       ],
-      "label": "Starship"
+      "material": {
+        "type": "standard",
+        "color": "#ff3300",
+        "roughness": 0.5,
+        "metalness": 0.0,
+        "emissive": "#ff9900",
+        "emissiveIntensity": 1.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "geometry": {
+        "type": "plane",
+        "width": 20,
+        "height": 20
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ]
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.4,
-      "color": "#ffffff",
+      "intensity": 0.2,
+      "color": "#ff9900",
       "castShadow": false
     },
     {
       "type": "directional",
-      "intensity": 1.2,
+      "intensity": 1.0,
       "color": "#ffffff",
       "position": [
         10,
@@ -44,19 +73,30 @@
         10
       ],
       "castShadow": true
+    },
+    {
+      "type": "point",
+      "intensity": 5.0,
+      "color": "#ff3300",
+      "position": [
+        0,
+        -5,
+        0
+      ],
+      "castShadow": false
     }
   ],
   "camera": {
     "position": [
-      6.56,
-      5.0,
-      18.0
+      0,
+      10,
+      20
     ],
     "target": [
-      6.56,
-      0.0,
-      0.0
+      0,
+      0,
+      0
     ],
-    "fov": 65
+    "fov": 60
   }
 }

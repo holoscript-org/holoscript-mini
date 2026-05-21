@@ -240,3 +240,6 @@ PROJECT_CONTEXT_FOR_GPT.md
 gui/node_modules/
 gui/.next/
 gui/tsconfig.tsbuildinfo
+
+/pipeline/knowledge_base
+/core/assets/meshes

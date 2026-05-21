@@ -9,7 +9,9 @@ Run with:
 from __future__ import annotations
 
 import json
+import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,10 +29,39 @@ from core.utils.logger import get_logger
 
 logger = get_logger("api_server")
 
-app = FastAPI(title="HoloScript API", version="1.0.0")
+# ---------------------------------------------------------------------------
+# Pipeline state — shared between /command and /command/status
+# ---------------------------------------------------------------------------
+
+_pipeline_lock = threading.Lock()
+_pipeline_state: dict[str, Any] = {"running": False, "state": "idle", "message": ""}
+
+
+# ---------------------------------------------------------------------------
+# Startup lifespan — preload semantic model so first command is instant
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    def _preload():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            from pipeline.semantic_parser import get_parser
+            get_parser()
+            logger.info("Semantic parser preloaded and ready")
+        except Exception as exc:
+            logger.warning("Semantic parser preload failed: %s", exc)
+
+    threading.Thread(target=_preload, daemon=True, name="preload-semantic").start()
+    yield
+
+
+app = FastAPI(title="HoloScript API", version="1.0.0", lifespan=lifespan)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _CORE_DIR = _PROJECT_ROOT / "core"
+_LIVE_SCENE_PATH = _CORE_DIR / "outputs" / "live_scene.json"
 _RENDER_PREVIEW_PATH = _PROJECT_ROOT / ".runtime" / "render_preview.jpg"
 _RENDER_PREVIEW_FALLBACK = _PROJECT_ROOT / "renderer" / "assets" / "test_frame.png"
 
@@ -91,7 +122,17 @@ def get_scene(name: str | None = None) -> dict[str, Any]:
     scene = snap.get("scene")
     if isinstance(scene, dict):
         return scene
-    return scene_state.scene_json or {}
+
+    if scene_state.scene_json:
+        return scene_state.scene_json
+
+    if _LIVE_SCENE_PATH.exists():
+        try:
+            return json.loads(_LIVE_SCENE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +268,48 @@ def stream_preview() -> StreamingResponse:
 
 
 
+# ---------------------------------------------------------------------------
+# POST /command  — run the Member 1 pipeline from a text/voice transcript
+# GET  /command/status — poll pipeline state (running / done / error)
+# ---------------------------------------------------------------------------
+
+class CommandPayload(BaseModel):
+    command: str
+
+
+@app.post("/command")
+def post_command(payload: CommandPayload) -> dict[str, str]:
+    with _pipeline_lock:
+        if _pipeline_state["running"]:
+            return {"status": "busy", "message": "Pipeline already running"}
+        _pipeline_state.update({"running": True, "state": "running", "message": payload.command})
+
+    def _run() -> None:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            from pipeline.pipeline_runner import run_pipeline
+            scene = run_pipeline(payload.command)
+            scene_state.scene_json = scene
+            publish_scene_command(scene)
+            with _pipeline_lock:
+                _pipeline_state.update({"running": False, "state": "done", "message": "Scene ready"})
+        except Exception as exc:
+            logger.error("Pipeline error: %s", exc)
+            with _pipeline_lock:
+                _pipeline_state.update({"running": False, "state": "error", "message": str(exc)})
+
+    threading.Thread(target=_run, daemon=True, name="pipeline").start()
+    return {"status": "processing", "message": payload.command}
+
+
+@app.get("/command/status")
+def get_command_status() -> dict[str, Any]:
+    with _pipeline_lock:
+        return dict(_pipeline_state)
+
+
+# ---------------------------------------------------------------------------
 _VALID_ACTIONS = {"space", "left", "right", "up", "down", "e", "r", "j", "k", "h"}
 
 

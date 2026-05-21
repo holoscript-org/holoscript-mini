@@ -188,15 +188,27 @@ function GltfObject({ obj }: { obj: SceneObject }) {
   const clone = useMemo(() => scene.clone(true), [scene])
   const params = useMemo(() => buildMaterialParams(obj.material), [obj.material])
 
+  // #ffffff with no extras = "preserve the GLB's original vertex colors / textures"
+  const preserveOriginal = useMemo(() => {
+    const m = obj.material
+    return (
+      m.color === "#ffffff" &&
+      !m.emissive && !m.map && !m.normalMap &&
+      !m.roughnessMap && !m.metalnessMap
+    )
+  }, [obj.material])
+
   useEffect(() => {
     clone.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        ;(child as THREE.Mesh).material = new THREE.MeshStandardMaterial(params)
-        ;(child as THREE.Mesh).castShadow = true
-        ;(child as THREE.Mesh).receiveShadow = true
+      const mesh = child as THREE.Mesh
+      if (!mesh.isMesh) return
+      if (!preserveOriginal) {
+        mesh.material = new THREE.MeshStandardMaterial(params)
       }
+      mesh.castShadow = true
+      mesh.receiveShadow = true
     })
-  }, [clone, params])
+  }, [clone, params, preserveOriginal])
 
   return <primitive object={clone} />
 }

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -64,7 +65,12 @@ class SemanticParser:
 
         self.threshold = threshold
         print("[semantic_parser] Loading sentence-transformer model...")
-        self._model = SentenceTransformer(MODEL_NAME)
+        # low_cpu_mem_usage=False avoids meta-tensor initialization that breaks
+        # on PyTorch ≥ 2.7 where .to() on meta tensors is no longer allowed.
+        self._model = SentenceTransformer(
+            MODEL_NAME,
+            model_kwargs={"low_cpu_mem_usage": False},
+        )
 
         self._concept_map: dict = json.loads(_MAP.read_text(encoding="utf-8"))
         self._descriptions: dict = json.loads(_DESC.read_text(encoding="utf-8"))
@@ -283,12 +289,16 @@ class SemanticParser:
 
 
 _parser_instance: SemanticParser | None = None
+_parser_lock = threading.Lock()
 
 
 def get_parser() -> SemanticParser:
     global _parser_instance
-    if _parser_instance is None:
-        _parser_instance = SemanticParser()
+    if _parser_instance is not None:
+        return _parser_instance
+    with _parser_lock:
+        if _parser_instance is None:
+            _parser_instance = SemanticParser()
     return _parser_instance
 
 

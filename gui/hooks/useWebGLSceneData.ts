@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Frame, SceneStatus } from "@/lib/api"
+import { Frame, SceneStatus, fetchScene } from "@/lib/api"
 import { buildWebglPovFrame } from "@/hooks/webglPov"
 import { validateScene } from "@/lib/sceneFactory"
 
@@ -26,6 +26,7 @@ interface WebGLSceneData {
   selectedScene: string
   sceneOptions: SceneOption[]
   setSelectedScene: (sceneId: string) => void
+  refreshFromBackend: () => Promise<void>
 }
 
 const DEFAULT_STATUS: SceneStatus = {
@@ -178,6 +179,22 @@ export function useWebGLSceneData(): WebGLSceneData {
     }
   }, [validated.fatal, selectedScene])
 
+  const refreshFromBackend = useCallback(async () => {
+    try {
+      const data = await fetchScene()
+      if (!data || typeof data !== "object" || !("objects" in data)) {
+        appendLog("[Pipeline] Backend returned no scene yet")
+        return
+      }
+      setScene(data)
+      setConnected(true)
+      appendLog("[Pipeline] Scene updated from pipeline output")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      appendLog(`[Pipeline] Failed to load scene from backend: ${msg}`)
+    }
+  }, [appendLog])
+
   return {
     frame,
     scene,
@@ -187,5 +204,6 @@ export function useWebGLSceneData(): WebGLSceneData {
     selectedScene,
     sceneOptions,
     setSelectedScene,
+    refreshFromBackend,
   }
 }
