@@ -1,0 +1,15 @@
+{
+  "id": "abstract_assault_rifle",
+  "src": "/assets/meshes/abstract/assault_rifle.glb",
+  "category": "abstract",
+  "tags": [
+    "weapon",
+    "weaponry",
+    "gun",
+    "rifle",
+    "ak47",
+    "ak-",
+    "abstract"
+  ],
+  "author": "Zsky"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "abstract_velociraptor",
+  "src": "/assets/meshes/abstract/velociraptor.glb",
+  "category": "abstract",
+  "tags": [
+    "reptile",
+    "animal",
+    "dinosaur",
+    "velociraptor",
+    "abstract"
+  ],
+  "author": "Quaternius"
+}

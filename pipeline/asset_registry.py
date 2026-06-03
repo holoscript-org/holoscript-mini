@@ -10,12 +10,33 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pipeline.knowledge_base.mongo_client import lookup_concept
+
 _ROOT = Path(__file__).resolve().parents[1]
 _MESHES = _ROOT / "core" / "assets" / "meshes"
 _KB = Path(__file__).parent / "knowledge_base"
 
-with (_KB / "concept_map.json").open(encoding="utf-8") as _f:
-    _CONCEPT_MAP: dict[str, dict[str, Any]] = json.load(_f)
+# JSON fallback — used only if MongoDB is unavailable
+_CONCEPT_MAP_FALLBACK: dict[str, dict[str, Any]] | None = None
+
+
+def _get_concept(name: str) -> dict[str, Any] | None:
+    """Look up a concept from MongoDB, falling back to the JSON file."""
+    doc = lookup_concept(name)
+    if doc:
+        return doc
+    # JSON fallback
+    global _CONCEPT_MAP_FALLBACK
+    if _CONCEPT_MAP_FALLBACK is None:
+        try:
+            with (_KB / "concept_map.json").open(encoding="utf-8") as f:
+                _CONCEPT_MAP_FALLBACK = json.load(f)
+        except Exception:
+            _CONCEPT_MAP_FALLBACK = {}
+    entry = _CONCEPT_MAP_FALLBACK.get(name)
+    if entry:
+        return {"_id": name, **entry}
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +101,7 @@ def get_verified_assets(intent: dict[str, Any]) -> list[dict[str, str]]:
     )
 
     for concept in all_concepts:
-        entry = _CONCEPT_MAP.get(concept, {})
+        entry = _get_concept(concept) or {}
 
         # Systems and effects are always built with primitives/generators
         if entry.get("type") in ("system", "effect"):

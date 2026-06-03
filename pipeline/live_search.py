@@ -15,6 +15,9 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from pipeline.cache import get_cached_asset, cache_asset
+from pipeline.knowledge_base.mongo_client import register_concept
+from pipeline.knowledge_base.embedder import embed_concept
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MESHES = _ROOT / "core" / "assets" / "meshes"
@@ -182,6 +185,16 @@ def fetch_live_assets(
         if not query:
             continue
         category = entry.get("category") or "abstract"
+        # Redis cache check first
+        redis_path = get_cached_asset(str(query))
+        if redis_path:
+            from pathlib import Path as _Path
+            disk = _Path(redis_path) if _Path(redis_path).is_absolute() else _ROOT / "core" / redis_path.lstrip("/")
+            if disk.exists():
+                sidecar = _sidecar_for_glb(disk, category) or {}
+                found.append({"concept": query, "sidecar": sidecar, "source": "redis_cache"})
+                continue
+
         cached = _cached_sidecar_for_query(str(query))
         if isinstance(cached, dict):
             src = cached.get("src")
@@ -231,6 +244,19 @@ def fetch_live_assets(
                     license_str or None,
                 )
                 found.append({"concept": query, "sidecar": sidecar, "source": "download"})
+                # Cache path in Redis and register in MongoDB
+                asset_src = sidecar.get("src", "")
+                cache_asset(str(query), asset_src)
+                description = f"Downloaded via Poly Pizza: {query}"
+                register_concept(
+                    name=str(query),
+                    asset_src=asset_src,
+                    category=category,
+                    asset_type="mesh",
+                    description=description,
+                    synonyms=tags,
+                )
+                embed_concept(str(query), description)
 
             if delay_s:
                 time.sleep(delay_s)

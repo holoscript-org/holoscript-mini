@@ -1,0 +1,11 @@
+{
+  "id": "abstract_rocket_ship",
+  "src": "/assets/meshes/abstract/rocket_ship.glb",
+  "category": "abstract",
+  "tags": [
+    "space",
+    "team rocket",
+    "abstract"
+  ],
+  "author": "Poly by Google"
+}

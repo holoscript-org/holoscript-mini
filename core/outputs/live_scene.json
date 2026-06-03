@@ -1,8 +1,8 @@
 {
-  "name": "Moving Clock",
+  "name": "prehistoric_creature_scene",
   "objects": [
     {
-      "id": "moving_clock",
+      "id": "human_figure",
       "type": "mesh",
       "position": [
         0,
@@ -16,49 +16,68 @@
         "metalness": 0.0
       },
       "animation": {
-        "type": "spin",
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "speed": 0.05
+        "type": "none"
       },
-      "model": "/assets/meshes/abstract/analog_clock_2.glb",
+      "model": "/assets/meshes/abstract/character_base.glb",
       "scale": [
         2,
         2,
         2
       ],
-      "label": "Moving Clock"
+      "label": "Human Figure"
+    },
+    {
+      "id": "creature",
+      "type": "mesh",
+      "position": [
+        5,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#ffffff",
+        "roughness": 0.5,
+        "metalness": 0.0
+      },
+      "animation": {
+        "type": "none"
+      },
+      "model": "/assets/meshes/abstract/t-rex.glb",
+      "scale": [
+        3,
+        3,
+        3
+      ],
+      "label": "T-Rex"
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.3,
-      "color": "#ffffff",
+      "intensity": 0.35,
+      "color": "#ffd7b9",
       "castShadow": false
     },
     {
       "type": "directional",
-      "intensity": 1.0,
+      "intensity": 1.2,
       "color": "#ffffff",
       "position": [
-        5,
-        5,
+        10,
+        10,
         5
       ],
       "castShadow": true
     },
     {
       "type": "point",
-      "intensity": 2.0,
-      "color": "#cccccc",
+      "intensity": 2.5,
+      "color": "#87ceeb",
       "position": [
         0,
-        0,
-        5
+        5,
+        0
       ],
       "castShadow": false
     }
@@ -66,14 +85,14 @@
   "camera": {
     "position": [
       0,
-      0,
-      10
+      5,
+      15
     ],
     "target": [
       0,
       0,
       0
     ],
-    "fov": 45
+    "fov": 55
   }
 }

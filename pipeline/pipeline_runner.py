@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core.utils.logger import get_logger
+from pipeline.cache import get_cached_scene, cache_scene
 from pipeline.semantic_parser import get_parser
 from pipeline.fallback_engine import resolve_intent
 from pipeline.asset_registry import get_verified_assets
@@ -193,9 +194,31 @@ def _fetch_polypizza(candidates: list[dict[str, str]]) -> list[dict]:
 # Main pipeline
 # ---------------------------------------------------------------------------
 
+_REFINE_PREFIXES = frozenset({
+	"add", "remove", "delete", "change", "make it", "move", "rotate",
+	"scale", "replace", "now", "also", "update", "rename", "swap",
+})
+
+
+def _is_refinement(transcript: str) -> bool:
+	"""Heuristic: does the transcript look like a scene refinement rather than a new scene?"""
+	t = transcript.lower().strip()
+	return any(t.startswith(p) for p in _REFINE_PREFIXES)
+
+
 def run_pipeline(transcript: str) -> dict:
 	t0 = time.perf_counter()
 	_ensure_parser_ready()
+
+	# ── Redis scene cache — skip for refinement commands ─────────────────────
+	if not _is_refinement(transcript):
+		cached = get_cached_scene(transcript)
+		if cached:
+			logger.info("Redis cache HIT — serving cached scene")
+			_print_stage("Cache HIT: serving from Redis")
+			OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+			OUTPUT_PATH.write_text(__import__("json").dumps(cached, indent=2), encoding="utf-8")
+			return cached
 
 	# ── Stage 1: receive transcript ──────────────────────────────────────────
 	logger.info("Stage 1: transcript received (len=%d)", len(transcript or ""))
@@ -305,6 +328,11 @@ def run_pipeline(transcript: str) -> dict:
 		vr = validate_scene(scene)
 
 	final = vr.get("scene") or scene
+
+	# ── Cache the result in Redis (new scenes only, not refinements) ──────────
+	if not _is_refinement(transcript) and final.get("objects"):
+		cache_scene(transcript, final)
+		logger.info("Redis: scene cached for transcript (len=%d)", len(transcript))
 
 	# ── Stage 8: fallback if still empty ─────────────────────────────────────
 	if not final.get("objects"):
