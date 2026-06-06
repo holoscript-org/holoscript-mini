@@ -5,15 +5,12 @@ This is the one-time setup step for the voice -> JSON -> scene pipeline:
 
     python -m pipeline.asset_ingester
 
-The ingester writes one sidecar JSON per downloaded GLB into
-pipeline/knowledge_base/assets. kb_builder.py later reads those sidecars to
-build concept_map.json and concept_descriptions.json.
+The ingester registers downloaded mesh metadata directly in MongoDB.
 """
 
 from __future__ import annotations
 
 import io
-import json
 import os
 import re
 import time
@@ -23,11 +20,12 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from pipeline.knowledge_base.embedder import embed_concept
+from pipeline.knowledge_base.mongo_client import register_concept
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MESHES = _ROOT / "core" / "assets" / "meshes"
 _HDRI = _ROOT / "core" / "assets" / "hdri"
-_KB = Path(__file__).parent / "knowledge_base" / "assets"
 
 load_dotenv(_ROOT / ".env")
 
@@ -107,25 +105,27 @@ def _download_file(url: str, dest: Path) -> bool:
         return False
 
 
-def _write_sidecar(
+def _register_asset_metadata(
     glb_path: Path,
     category: str,
     tags: list[str],
     author: str = "",
     license_str: str = "",
 ) -> None:
-    _KB.mkdir(parents=True, exist_ok=True)
     clean_tags = list(dict.fromkeys(t.lower().strip() for t in tags if t and t.strip()))
     asset_id = f"{category}_{glb_path.stem}"
-    sidecar = {
-        "id": asset_id,
-        "src": f"/assets/meshes/{category}/{glb_path.name}",
-        "category": category,
-        "tags": clean_tags,
-        "author": author,
-        "license": license_str,
-    }
-    (_KB / f"{asset_id}.json").write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    concept = glb_path.stem.lower().strip()
+    asset_src = f"/assets/meshes/{category}/{glb_path.name}"
+    description = " ".join([concept, category, *clean_tags])
+    register_concept(
+        name=concept,
+        asset_src=asset_src,
+        category=category,
+        asset_type="object",
+        description=description,
+        synonyms=[asset_id, *clean_tags],
+    )
+    embed_concept(concept, description)
 
 
 def _poly_download_url(item: dict[str, Any]) -> str:
@@ -188,10 +188,10 @@ def fetch_polypizza(max_per_query: int = POLYPIZZA_PER_QUERY) -> None:
                 )
                 license_str = str(item.get("License") or item.get("license") or "CC-BY")
                 if dest.exists():
-                    _write_sidecar(dest, category, tags, str(author), license_str)
+                    _register_asset_metadata(dest, category, tags, str(author), license_str)
                     continue
                 if _download_file(dl_url, dest):
-                    _write_sidecar(dest, category, tags, str(author), license_str)
+                    _register_asset_metadata(dest, category, tags, str(author), license_str)
                 time.sleep(0.3)
 
 
@@ -229,14 +229,14 @@ def fetch_kenney() -> None:
                     tags = [part for part in stem.split() if not part.isdigit()]
                     tags += [category, category.rstrip("s")]
                     if dest.exists():
-                        _write_sidecar(dest, category, tags, "Kenney", "CC0")
+                        _register_asset_metadata(dest, category, tags, "Kenney", "CC0")
                         continue
                     data = archive.read(entry)
                     if len(data) > MAX_BYTES:
                         print(f"  skip {dest.name}: over {MAX_BYTES // 1024 // 1024}MB limit")
                         continue
                     dest.write_bytes(data)
-                    _write_sidecar(dest, category, tags, "Kenney", "CC0")
+                    _register_asset_metadata(dest, category, tags, "Kenney", "CC0")
                     print(f"  ok {dest.name}")
         except Exception as exc:
             print(f"  failed Kenney {category}: {exc}")
@@ -251,10 +251,10 @@ def fetch_gltf_samples() -> None:
             dest = dest_dir / Path(url).name
             tags = [Path(url).stem.lower(), category, category.rstrip("s")]
             if dest.exists():
-                _write_sidecar(dest, category, tags, "Khronos Group", "CC-BY 4.0")
+                _register_asset_metadata(dest, category, tags, "Khronos Group", "CC-BY 4.0")
                 continue
             if _download_file(url, dest):
-                _write_sidecar(dest, category, tags, "Khronos Group", "CC-BY 4.0")
+                _register_asset_metadata(dest, category, tags, "Khronos Group", "CC-BY 4.0")
 
 
 def fetch_polyhaven_hdri(max_hdris: int = 3) -> None:
@@ -292,16 +292,14 @@ def run_ingestion() -> None:
     print("=== Asset Ingestion ===")
     _MESHES.mkdir(parents=True, exist_ok=True)
     _HDRI.mkdir(parents=True, exist_ok=True)
-    _KB.mkdir(parents=True, exist_ok=True)
     fetch_polypizza()
     fetch_kenney()
     fetch_gltf_samples()
     fetch_polyhaven_hdri()
     total = sum(1 for _ in _MESHES.rglob("*.glb"))
-    sidecars = sum(1 for _ in _KB.glob("*.json"))
     hdris = sum(1 for _ in _HDRI.glob("*.hdr"))
-    print(f"\n=== Done: {total} GLBs, {sidecars} sidecars, {hdris} HDRIs ===")
-    print("Next step: python -m pipeline.kb_builder")
+    print(f"\n=== Done: {total} GLBs, {hdris} HDRIs ===")
+    print("Knowledge-base metadata registered in MongoDB.")
 
 
 if __name__ == "__main__":

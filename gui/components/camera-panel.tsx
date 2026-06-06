@@ -61,6 +61,7 @@ export function CameraPanel({
   onPointMove,
   onPointHoldToggle,
   resetSeq,
+  enableObjectGestures = true,
   compact = false,
 }: {
   onGestureUpdate?: (rotationDelta: number, scaleDelta: number, gesture: GestureType, nowMs: number) => void
@@ -72,6 +73,8 @@ export function CameraPanel({
   onPointHoldToggle?: () => void
   /** Increments when the UI resets gesture state */
   resetSeq?: number
+  /** When false, gestures always control the whole scene (no select/drag flow). */
+  enableObjectGestures?: boolean
   compact?: boolean
 }) {
   const onGestureUpdateRef = useRef(onGestureUpdate)
@@ -179,30 +182,38 @@ export function CameraPanel({
           const nowMs = update.nowMs ?? performance.now()
 
           // ── Point-mode tracking and pinch-to-select ───────────────────────
-          if (update.gesture === "POINT") {
-            lastPointMsRef.current = nowMs
-            lastPointActiveRef.current = true
-            if (pointHoldStartRef.current === null) {
-              pointHoldStartRef.current = nowMs
+          if (enableObjectGestures) {
+            if (update.gesture === "POINT") {
+              lastPointMsRef.current = nowMs
+              lastPointActiveRef.current = true
+              if (pointHoldStartRef.current === null) {
+                pointHoldStartRef.current = nowMs
+                pointHoldFiredRef.current = false
+              } else if (!pointHoldFiredRef.current && nowMs - pointHoldStartRef.current >= POINT_HOLD_TOGGLE_MS) {
+                pointHoldFiredRef.current = true
+                onPointHoldToggleRef.current?.()
+              }
+              if (indexTipRef.current) {
+                onPointMoveRef.current?.(indexTipRef.current, nowMs)
+              }
+            } else if (update.gesture === "PINCH") {
+              const inPointWindow = nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS
+              if (inPointWindow && indexTipRef.current) {
+                onPinchSelectRef.current?.(indexTipRef.current.x, indexTipRef.current.y)
+                lastPointMsRef.current = 0  // prevent re-fire
+              }
+            } else if (lastPointActiveRef.current) {
+              lastPointActiveRef.current = false
+              onPointMoveRef.current?.(null, nowMs)
+              pointHoldStartRef.current = null
               pointHoldFiredRef.current = false
-            } else if (!pointHoldFiredRef.current && nowMs - pointHoldStartRef.current >= POINT_HOLD_TOGGLE_MS) {
-              pointHoldFiredRef.current = true
-              onPointHoldToggleRef.current?.()
-            }
-            if (indexTipRef.current) {
-              onPointMoveRef.current?.(indexTipRef.current, nowMs)
-            }
-          } else if (update.gesture === "PINCH") {
-            const inPointWindow = nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS
-            if (inPointWindow && indexTipRef.current) {
-              onPinchSelectRef.current?.(indexTipRef.current.x, indexTipRef.current.y)
-              lastPointMsRef.current = 0  // prevent re-fire
             }
           } else if (lastPointActiveRef.current) {
+            lastPointMsRef.current = 0
             lastPointActiveRef.current = false
-            onPointMoveRef.current?.(null, nowMs)
             pointHoldStartRef.current = null
             pointHoldFiredRef.current = false
+            onPointMoveRef.current?.(null, nowMs)
           }
 
           if (
@@ -217,7 +228,7 @@ export function CameraPanel({
           }
 
           // Suppress rotation while in point-mode window so PINCH means "select" not "rotate"
-          const inPointWindow = nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS
+          const inPointWindow = enableObjectGestures && (nowMs - lastPointMsRef.current < POINT_MODE_WINDOW_MS)
           onGestureUpdateRef.current?.(
             inPointWindow ? 0 : update.rotationDelta,
             update.scaleDelta,

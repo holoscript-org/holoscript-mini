@@ -117,9 +117,17 @@ def _extract_candidate_phrases(transcript: str, unresolved: list[str]) -> list[s
 				if phrase not in phrases:
 					phrases.append(phrase)
 
+	phrase_words = {
+		word
+		for phrase in phrases
+		for word in phrase.split()
+	}
+
 	# Then individual unresolved words (fallback)
 	for token in unresolved:
 		t = token.strip().lower()
+		if t in phrase_words:
+			continue
 		if t and len(t) >= 3 and t not in _STOPWORDS and t not in phrases:
 			phrases.append(t)
 
@@ -140,13 +148,23 @@ def _build_live_candidates(
 	already_covered = {a["concept"] for a in verified_assets}
 	candidates: list[dict[str, str]] = []
 
+	unresolved_phrases = _extract_candidate_phrases(transcript, unresolved)
+	phrase_words = {
+		word
+		for phrase in unresolved_phrases
+		if " " in phrase
+		for word in phrase.split()
+	}
+
 	# Resolved objects that had no local GLB match
 	for concept in resolved_intent.get("objects", []):
+		if concept in phrase_words:
+			continue
 		if concept not in already_covered:
 			candidates.append({"concept": concept, "category": "abstract"})
 
 	# Compound + individual phrases from unresolved tokens
-	for phrase in _extract_candidate_phrases(transcript, unresolved):
+	for phrase in unresolved_phrases:
 		if phrase not in already_covered:
 			candidates.append({"concept": phrase, "category": "abstract"})
 
@@ -161,7 +179,7 @@ def _build_live_candidates(
 
 
 def _fetch_polypizza(candidates: list[dict[str, str]]) -> list[dict]:
-	"""Call live_search.fetch_live_assets and convert sidecars to verified-asset dicts."""
+	"""Call live_search.fetch_live_assets and convert Mongo docs to verified assets."""
 	try:
 		from pipeline.live_search import fetch_live_assets
 		results = fetch_live_assets(candidates, max_per_concept=1)
@@ -171,8 +189,8 @@ def _fetch_polypizza(candidates: list[dict[str, str]]) -> list[dict]:
 
 	assets: list[dict] = []
 	for r in results:
-		sidecar = r.get("sidecar") or {}
-		src = sidecar.get("src", "")
+		doc = r.get("sidecar") or {}
+		src = doc.get("asset_src") or doc.get("src", "")
 		if not src:
 			continue
 		# Verify the file actually landed on disk
@@ -241,8 +259,17 @@ def run_pipeline(transcript: str) -> dict:
 	stage_start = time.perf_counter()
 	resolved_intent, unresolved = resolve_intent(raw_intent)
 	extra_unresolved = raw_intent.get("_unresolved_tokens", []) if isinstance(raw_intent, dict) else []
+	resolved_terms = {
+		str(concept).lower().strip()
+		for bucket in ["objects", "structures", "systems", "effects"]
+		for concept in resolved_intent.get(bucket, [])
+	}
 	for token in extra_unresolved:
-		if isinstance(token, str) and token not in unresolved:
+		if not isinstance(token, str):
+			continue
+		if token.lower().strip() in resolved_terms:
+			continue
+		if token not in unresolved:
 			unresolved.append(token)
 	logger.info(
 		"Stage 3: resolve (resolved=%d, unresolved=%d, %dms)",

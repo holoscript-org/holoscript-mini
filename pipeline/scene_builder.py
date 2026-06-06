@@ -1,16 +1,10 @@
 """Assembles scene dict from retrieved components."""
 from __future__ import annotations
 
-import json
 import math
 import random
-from pathlib import Path
 
 from pipeline import effects, generators
-
-_KB = Path(__file__).parent / "knowledge_base"
-with (_KB / "concept_map.json").open(encoding="utf-8") as f:
-	_CONCEPT_MAP = json.load(f)
 
 DEFAULT_LIGHTS = [
 	{"type": "ambient", "intensity": 0.4, "color": "#ffffff"},

@@ -1,108 +1,74 @@
 """
-Handles concepts that scored below the embedding threshold.
+Resolve parser output against the Mongo-backed knowledge base.
 
-LEVEL 1 -- MongoDB has direct entry          -> use it
-LEVEL 2 -- MongoDB synonym match             -> remap to known concept
-LEVEL 3 -- compound word split               -> try sub-tokens
-LEVEL 4 -- signal LLM                        -> return as unresolved
-
-Falls back to JSON files if MongoDB is unavailable.
+Resolution order:
+  1. Direct Mongo/Redis concept lookup
+  2. Mongo synonym lookup
+  3. Compound token lookup
+  4. Mongo embedding similarity
 """
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-from pipeline.knowledge_base.mongo_client import lookup_concept, lookup_synonym
 from pipeline.knowledge_base.embedder import semantic_search
+from pipeline.knowledge_base.mongo_client import lookup_concept, lookup_synonym
 
 
-# JSON fallback — used only if MongoDB is down
-_KB = Path(__file__).parent / "knowledge_base"
-_CONCEPT_MAP_FALLBACK: dict | None = None
-_SYNONYM_MAP_FALLBACK: dict | None = None
+def _lookup_variants(token: str) -> list[str]:
+    normalized = token.lower().strip()
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+    variants = [normalized]
+    if compact and compact not in variants:
+        variants.append(compact)
+    return variants
 
 
-def _get_json_concept_map() -> dict:
-    global _CONCEPT_MAP_FALLBACK
-    if _CONCEPT_MAP_FALLBACK is None:
-        try:
-            with (_KB / "concept_map.json").open(encoding="utf-8") as f:
-                _CONCEPT_MAP_FALLBACK = json.load(f)
-        except Exception:
-            _CONCEPT_MAP_FALLBACK = {}
-    return _CONCEPT_MAP_FALLBACK
+def _lookup(token: str) -> dict | None:
+    return lookup_concept(token)
 
 
-def _get_json_synonym_map() -> dict:
-    global _SYNONYM_MAP_FALLBACK
-    if _SYNONYM_MAP_FALLBACK is None:
-        try:
-            with (_KB / "synonym_map.json").open(encoding="utf-8") as f:
-                raw = json.load(f)
-                _SYNONYM_MAP_FALLBACK = {k: v for k, v in raw.items() if not k.startswith("_")}
-        except Exception:
-            _SYNONYM_MAP_FALLBACK = {}
-    return _SYNONYM_MAP_FALLBACK
+def _lookup_synonym(token: str) -> dict | None:
+    return lookup_synonym(token)
 
 
-def _lookup_with_fallback(token: str) -> dict | None:
-    """Try MongoDB first; fall back to JSON on failure."""
-    doc = lookup_concept(token)
-    if doc:
-        return doc
-    # JSON fallback
-    cmap = _get_json_concept_map()
-    entry = cmap.get(token)
-    if entry:
-        return {"_id": token, **entry}
-    return None
-
-
-def _synonym_with_fallback(token: str) -> dict | None:
-    """Try MongoDB synonym lookup; fall back to JSON synonym_map."""
-    doc = lookup_synonym(token)
-    if doc:
-        return doc
-    # JSON fallback
-    smap = _get_json_synonym_map()
-    cmap = _get_json_concept_map()
-    targets = smap.get(token, [])
-    if isinstance(targets, str):
-        targets = [targets]
-    for canonical in targets:
-        entry = cmap.get(canonical)
-        if entry:
-            return {"_id": canonical, **entry}
-    return None
+def _canonical_id(doc: dict) -> str:
+    asset_src = doc.get("asset_src")
+    synonyms = {
+        str(alias).lower().strip()
+        for alias in doc.get("synonyms", [])
+        if isinstance(alias, str)
+    }
+    if isinstance(asset_src, str) and asset_src.strip():
+        stem = Path(asset_src).stem.lower().strip()
+        if stem in synonyms:
+            return stem
+    return str(doc["_id"])
 
 
 def _resolve_single(token: str) -> str | None:
     t = token.lower().strip()
 
-    # Level 1: direct match
-    doc = _lookup_with_fallback(t)
-    if doc:
-        return doc["_id"]
+    for variant in _lookup_variants(t):
+        doc = _lookup(variant)
+        if doc:
+            return _canonical_id(doc)
 
-    # Level 2: synonym match
-    doc = _synonym_with_fallback(t)
-    if doc:
-        return doc["_id"]
+        doc = _lookup_synonym(variant)
+        if doc:
+            return _canonical_id(doc)
 
-    # Level 3: compound word split
     for part in re.split(r"[-_\s]", t):
         if not part:
             continue
-        doc = _lookup_with_fallback(part)
+        doc = _lookup(part)
         if doc:
-            return doc["_id"]
-        doc = _synonym_with_fallback(part)
+            return _canonical_id(doc)
+        doc = _lookup_synonym(part)
         if doc:
-            return doc["_id"]
+            return _canonical_id(doc)
 
-    # Level 4: semantic similarity (handles unknown phrasings, plurals, metaphors)
     try:
         results = semantic_search(t, top_k=1)
         if results:
@@ -115,13 +81,13 @@ def _resolve_single(token: str) -> str | None:
 
 def _resolve_phrase(phrase: str) -> str | None:
     p = phrase.lower().strip()
-    doc = _lookup_with_fallback(p)
-    if doc:
-        return doc["_id"]
-    doc = _synonym_with_fallback(p)
-    if doc:
-        return doc["_id"]
-    # Semantic fallback for multi-word phrases
+    for variant in _lookup_variants(p):
+        doc = _lookup(variant)
+        if doc:
+            return _canonical_id(doc)
+        doc = _lookup_synonym(variant)
+        if doc:
+            return _canonical_id(doc)
     try:
         results = semantic_search(p, top_k=1)
         if results:
@@ -132,58 +98,77 @@ def _resolve_phrase(phrase: str) -> str | None:
 
 
 def _get_entry(concept_id: str) -> dict:
-    """Retrieve full entry for a resolved concept id."""
-    doc = _lookup_with_fallback(concept_id)
-    if doc:
-        return doc
-    # JSON fallback
-    cmap = _get_json_concept_map()
-    entry = cmap.get(concept_id, {})
-    return {"_id": concept_id, **entry}
+    return _lookup(concept_id) or {"_id": concept_id}
+
+
+def _bucket_for_entry(entry: dict, default: str = "objects") -> str:
+    return {
+        "object": "objects",
+        "structure": "structures",
+        "system": "systems",
+        "effect": "effects",
+    }.get(entry.get("type", ""), default)
 
 
 def resolve_intent(intent: dict) -> tuple[dict, list[str]]:
     """
-    Resolves anything in intent that didn't make it through embedding.
+    Resolves low-confidence and unresolved parser output.
     Returns (resolved_intent, unresolved_list).
     """
     resolved = {"objects": [], "structures": [], "systems": [], "effects": []}
     unresolved: list[str] = []
+    suppressed_tokens: set[str] = set()
 
-    phrase_hits = intent.get("_phrase_hits", []) if isinstance(intent, dict) else []
-    for phrase in phrase_hits:
-        if not isinstance(phrase, str):
-            continue
+    phrase_candidates: list[str] = []
+    if isinstance(intent, dict):
+        for phrase in intent.get("_phrase_hits", []):
+            if isinstance(phrase, str) and phrase not in phrase_candidates:
+                phrase_candidates.append(phrase)
+        for phrase in intent.get("_unresolved_tokens", []):
+            if isinstance(phrase, str) and " " in phrase and phrase not in phrase_candidates:
+                phrase_candidates.append(phrase)
+
+    for phrase in phrase_candidates:
         mapped = _resolve_phrase(phrase)
         if mapped:
             entry = _get_entry(mapped)
-            target = {
-                "object":    "objects",
-                "structure": "structures",
-                "system":    "systems",
-                "effect":    "effects",
-            }.get(entry.get("type", ""), "objects")
+            target = _bucket_for_entry(entry)
             if mapped not in resolved[target]:
                 resolved[target].append(mapped)
-        else:
-            if phrase not in unresolved:
-                unresolved.append(phrase)
+            suppressed_tokens.update(
+                token for token in re.split(r"[-_\s]", phrase.lower().strip()) if token
+            )
+        elif phrase not in unresolved:
+            unresolved.append(phrase)
 
     for bucket in ["objects", "structures", "systems", "effects"]:
         for concept in intent.get(bucket, []):
+            if not isinstance(concept, str):
+                continue
+            if concept.lower().strip() in suppressed_tokens:
+                continue
             mapped = _resolve_single(concept)
             if mapped:
                 entry = _get_entry(mapped)
-                target = {
-                    "object":    "objects",
-                    "structure": "structures",
-                    "system":    "systems",
-                    "effect":    "effects",
-                }.get(entry.get("type", ""), bucket)
+                target = _bucket_for_entry(entry, bucket)
                 if mapped not in resolved[target]:
                     resolved[target].append(mapped)
-            else:
-                if concept not in unresolved:
-                    unresolved.append(concept)
+            elif concept not in unresolved:
+                unresolved.append(concept)
+
+    if isinstance(intent, dict):
+        for token in intent.get("_unresolved_tokens", []):
+            if not isinstance(token, str) or " " in token:
+                continue
+            if token.lower().strip() in suppressed_tokens:
+                continue
+            mapped = _resolve_single(token)
+            if mapped:
+                entry = _get_entry(mapped)
+                target = _bucket_for_entry(entry)
+                if mapped not in resolved[target]:
+                    resolved[target].append(mapped)
+            elif token not in unresolved:
+                unresolved.append(token)
 
     return resolved, unresolved

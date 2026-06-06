@@ -1,25 +1,20 @@
 """
 Semantic intent parser using sentence-transformer embeddings.
 
-This replaces brittle keyword matching with cosine similarity over the generated
-concept_descriptions.json corpus. Instantiate SemanticParser once at startup;
-model loading and corpus encoding are intentionally not repeated per command.
+The concept corpus is loaded from MongoDB. Instantiate SemanticParser once at
+startup; model loading and corpus encoding are intentionally not repeated per
+command.
 """
 
 from __future__ import annotations
 
-import json
 import re
 import threading
-from pathlib import Path
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-_KB = Path(__file__).parent / "knowledge_base"
-_MAP = _KB / "concept_map.json"
-_DESC = _KB / "concept_descriptions.json"
-_SYN = _KB / "synonym_map.json"
+from pipeline.knowledge_base.mongo_client import get_all_concepts
 
 SIMILARITY_THRESHOLD = 0.35
 OBJECT_EMBEDDING_THRESHOLD = 0.40
@@ -56,13 +51,6 @@ class SemanticParser:
     """Load model + concept corpus once, then parse many transcripts quickly."""
 
     def __init__(self, threshold: float = SIMILARITY_THRESHOLD) -> None:
-        if not _MAP.exists():
-            raise RuntimeError("concept_map.json not found. Run: python -m pipeline.kb_builder")
-        if not _DESC.exists():
-            raise RuntimeError(
-                "concept_descriptions.json not found. Run: python -m pipeline.kb_builder"
-            )
-
         self.threshold = threshold
         print("[semantic_parser] Loading sentence-transformer model...")
         # low_cpu_mem_usage=False avoids meta-tensor initialization that breaks
@@ -72,16 +60,41 @@ class SemanticParser:
             model_kwargs={"low_cpu_mem_usage": False},
         )
 
-        self._concept_map: dict = json.loads(_MAP.read_text(encoding="utf-8"))
-        self._descriptions: dict = json.loads(_DESC.read_text(encoding="utf-8"))
-        self._synonym_map: dict = {}
-        if _SYN.exists():
-            raw_syn = json.loads(_SYN.read_text(encoding="utf-8"))
-            self._synonym_map = {
-                key: value
-                for key, value in raw_syn.items()
-                if isinstance(key, str) and not key.startswith("_") and isinstance(value, list)
+        docs = get_all_concepts()
+        if not docs:
+            raise RuntimeError("No concepts found in MongoDB knowledge base.")
+
+        self._concept_map: dict = {}
+        self._descriptions: dict = {}
+        self._synonym_map: dict[str, list[str]] = {}
+        for doc in docs:
+            concept = str(doc.get("_id") or "").lower().strip()
+            if not concept:
+                continue
+            self._concept_map[concept] = {
+                "type": doc.get("type", "object"),
+                "asset_id": doc.get("asset_id"),
+                "asset_src": doc.get("asset_src"),
+                "category": doc.get("category"),
             }
+            synonyms = [
+                str(alias).lower().strip()
+                for alias in doc.get("synonyms", [])
+                if isinstance(alias, str) and alias.strip()
+            ]
+            description_parts = [
+                concept,
+                str(doc.get("description") or ""),
+                str(doc.get("category") or ""),
+                *synonyms,
+            ]
+            self._descriptions[concept] = " ".join(
+                part for part in description_parts if part.strip()
+            )
+            for alias in synonyms:
+                self._synonym_map.setdefault(alias, [])
+                if concept not in self._synonym_map[alias]:
+                    self._synonym_map[alias].append(concept)
         self._phrase_candidates: list[tuple[list[str], str]] = self._build_phrase_candidates()
         self._concepts: list[str] = list(self._descriptions.keys())
         corpus = [self._descriptions[concept] for concept in self._concepts]

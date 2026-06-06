@@ -1,12 +1,11 @@
 """
 Live Poly Pizza search for concept-based asset expansion.
 
-Uses concept tokens (not full transcripts), caches assets locally,
-and returns sidecar metadata for retrieval expansion.
+Downloaded GLBs are stored under core/assets/meshes, while all knowledge-base
+metadata is stored in MongoDB and Redis. No local KB sidecars are written.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import time
@@ -15,13 +14,13 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from pipeline.cache import get_cached_asset, cache_asset
-from pipeline.knowledge_base.mongo_client import register_concept
+
+from pipeline.cache import get_cached_asset
 from pipeline.knowledge_base.embedder import embed_concept
+from pipeline.knowledge_base.mongo_client import lookup_concept, register_concept
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MESHES = _ROOT / "core" / "assets" / "meshes"
-_KB_ASSETS = Path(__file__).parent / "knowledge_base" / "assets"
 
 load_dotenv(_ROOT / ".env")
 
@@ -98,68 +97,37 @@ def _unique_glb_path(category: str, filename: str) -> Path:
     return path
 
 
-def _write_sidecar(
-    glb_path: Path,
+def _asset_doc(
+    concept: str,
+    asset_src: str,
     category: str,
-    tags: list[str],
-    author: str | None,
-    license_str: str | None,
+    tags: list[str] | None = None,
+    author: str | None = None,
+    license_str: str | None = None,
 ) -> dict[str, Any]:
-    _KB_ASSETS.mkdir(parents=True, exist_ok=True)
-    clean_tags = list(dict.fromkeys(t.lower().strip() for t in tags if t and t.strip()))
-    asset_id = f"{category}_{glb_path.stem}"
-    sidecar: dict[str, Any] = {
-        "id": asset_id,
-        "src": f"/assets/meshes/{category}/{glb_path.name}",
+    clean_tags = []
+    for value in [concept, *(tags or [])]:
+        tag = str(value).lower().strip()
+        if tag and tag not in clean_tags:
+            clean_tags.append(tag)
+    doc: dict[str, Any] = {
+        "_id": concept.lower().strip(),
+        "asset_id": f"{category}_{Path(asset_src).stem}",
+        "asset_src": asset_src,
         "category": category,
+        "type": "object",
+        "description": f"Downloaded via Poly Pizza: {concept}",
+        "synonyms": clean_tags,
     }
-    if clean_tags:
-        sidecar["tags"] = clean_tags
     if author:
-        sidecar["author"] = author
+        doc["author"] = author
     if license_str:
-        sidecar["license"] = license_str
-
-    (_KB_ASSETS / f"{asset_id}.json").write_text(
-        json.dumps(sidecar, indent=2), encoding="utf-8"
-    )
-    return sidecar
+        doc["license"] = license_str
+    return doc
 
 
-def _load_sidecar(asset_id: str) -> dict[str, Any] | None:
-    path = _KB_ASSETS / f"{asset_id}.json"
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _cached_sidecar_for_query(query: str) -> dict[str, Any] | None:
-    if not _KB_ASSETS.exists():
-        return None
-    q = query.lower().strip()
-    for path in _KB_ASSETS.glob("*.json"):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if not isinstance(data, dict):
-            continue
-        tags = data.get("tags")
-        if isinstance(tags, list) and any(q == str(tag).lower().strip() for tag in tags):
-            return data
-        asset_id = str(data.get("id", "")).lower()
-        src = str(data.get("src", "")).lower()
-        if q and (q in asset_id or q in src):
-            return data
-    return None
-
-
-def _sidecar_for_glb(glb_path: Path, category: str) -> dict[str, Any] | None:
-    asset_id = f"{category}_{glb_path.stem}"
-    existing = _load_sidecar(asset_id)
-    if existing:
-        return existing
-    return _write_sidecar(glb_path, category, [], None, None)
+def _disk_path(asset_src: str) -> Path:
+    return _ROOT / "core" / asset_src.lstrip("/")
 
 
 def _search_polypizza(query: str, headers: dict[str, str]) -> list[dict[str, Any]]:
@@ -167,6 +135,29 @@ def _search_polypizza(query: str, headers: dict[str, str]) -> list[dict[str, Any
     resp.raise_for_status()
     payload = resp.json()
     return payload.get("results", payload if isinstance(payload, list) else [])
+
+
+def _remember_asset_query(
+    query: str,
+    asset_src: str,
+    category: str,
+    tags: list[str] | None = None,
+    author: str | None = None,
+    license_str: str | None = None,
+    update_embedding: bool = False,
+) -> dict[str, Any]:
+    doc = _asset_doc(query, asset_src, category, tags, author, license_str)
+    register_concept(
+        name=str(query),
+        asset_src=asset_src,
+        category=category,
+        asset_type="object",
+        description=str(doc["description"]),
+        synonyms=doc["synonyms"],
+    )
+    if update_embedding:
+        embed_concept(str(query), str(doc["description"]))
+    return lookup_concept(str(query)) or doc
 
 
 def fetch_live_assets(
@@ -185,26 +176,20 @@ def fetch_live_assets(
         if not query:
             continue
         category = entry.get("category") or "abstract"
-        # Redis cache check first
-        redis_path = get_cached_asset(str(query))
-        if redis_path:
-            from pathlib import Path as _Path
-            disk = _Path(redis_path) if _Path(redis_path).is_absolute() else _ROOT / "core" / redis_path.lstrip("/")
-            if disk.exists():
-                sidecar = _sidecar_for_glb(disk, category) or {}
-                found.append({"concept": query, "sidecar": sidecar, "source": "redis_cache"})
-                continue
 
-        cached = _cached_sidecar_for_query(str(query))
-        if isinstance(cached, dict):
-            src = cached.get("src")
-            if isinstance(src, str) and src.strip():
-                rel = src.lstrip("/").replace("assets/meshes/", "")
-                if (_ROOT / "core" / "assets" / "meshes" / rel).exists():
-                    found.append({"concept": query, "sidecar": cached, "source": "cache"})
-                    continue
+        existing = lookup_concept(str(query))
+        if existing and isinstance(existing.get("asset_src"), str) and _disk_path(existing["asset_src"]).exists():
+            found.append({"concept": query, "sidecar": existing, "source": "mongo"})
+            continue
+
+        redis_path = get_cached_asset(str(query))
+        if redis_path and _disk_path(redis_path).exists():
+            doc = _remember_asset_query(str(query), redis_path, category)
+            found.append({"concept": query, "sidecar": doc, "source": "redis_cache"})
+            continue
+
         try:
-            results = _search_polypizza(query, headers)
+            results = _search_polypizza(str(query), headers)
         except Exception:
             continue
 
@@ -214,14 +199,15 @@ def fetch_live_assets(
             dl_url = _poly_download_url(item)
             if not dl_url:
                 continue
+
             title = item.get("Title") or item.get("title") or query
             filename = _safe_filename(str(title))
-            dest = _unique_glb_path(category, filename)
+            original_dest = _MESHES / category / filename
 
             item_tags = item.get("Tags") or item.get("tags") or []
             if isinstance(item_tags, str):
                 item_tags = item_tags.split()
-            tags = list(item_tags) + [query, category.rstrip("s")]
+            tags = list(item_tags) + [str(query), category.rstrip("s")]
             author = (
                 _json_get(item, "Creator", "Username", default="")
                 or _json_get(item, "creator", "username", default="")
@@ -229,34 +215,27 @@ def fetch_live_assets(
             )
             license_str = str(item.get("License") or item.get("license") or "")
 
-            if dest.exists():
-                sidecar = _sidecar_for_glb(dest, category)
-                if sidecar:
-                    found.append({"concept": query, "sidecar": sidecar, "source": "cache"})
+            if original_dest.exists():
+                asset_src = f"/assets/meshes/{category}/{original_dest.name}"
+                doc = _remember_asset_query(
+                    str(query), asset_src, category, tags, author or None, license_str or None
+                )
+                found.append({"concept": query, "sidecar": doc, "source": "cache"})
                 continue
 
+            dest = _unique_glb_path(category, filename)
             if _download_file(dl_url, dest):
-                sidecar = _write_sidecar(
-                    dest,
+                asset_src = f"/assets/meshes/{category}/{dest.name}"
+                doc = _remember_asset_query(
+                    str(query),
+                    asset_src,
                     category,
                     tags,
                     author or None,
                     license_str or None,
+                    update_embedding=True,
                 )
-                found.append({"concept": query, "sidecar": sidecar, "source": "download"})
-                # Cache path in Redis and register in MongoDB
-                asset_src = sidecar.get("src", "")
-                cache_asset(str(query), asset_src)
-                description = f"Downloaded via Poly Pizza: {query}"
-                register_concept(
-                    name=str(query),
-                    asset_src=asset_src,
-                    category=category,
-                    asset_type="mesh",
-                    description=description,
-                    synonyms=tags,
-                )
-                embed_concept(str(query), description)
+                found.append({"concept": query, "sidecar": doc, "source": "download"})
 
             if delay_s:
                 time.sleep(delay_s)

@@ -102,9 +102,10 @@ def embed_concept(name: str, description: str = "") -> None:
     """
     text = description.strip() if description.strip() else name
     embedding = embed_text(text)
+    concept_id = name.lower().strip()
     try:
         get_collection().update_one(
-            {"_id": name.lower().strip()},
+            {"$or": [{"_id": concept_id}, {"synonyms": concept_id}]},
             {"$set": {"embedding": embedding}},
         )
     except Exception:
