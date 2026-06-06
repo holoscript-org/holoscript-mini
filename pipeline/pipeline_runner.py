@@ -26,6 +26,7 @@ from pipeline.semantic_parser import get_parser
 from pipeline.fallback_engine import resolve_intent
 from pipeline.asset_registry import get_verified_assets
 from pipeline.scene_architect import generate_scene as architect_generate
+from pipeline.critic_agent import critique_and_fix
 from pipeline.scene_validator import validate_scene
 from pipeline.repair_loop import DEMO_FALLBACK, repair
 
@@ -329,6 +330,18 @@ def run_pipeline(transcript: str) -> dict:
 			int((time.perf_counter() - stage_start) * 1000),
 		)
 		_print_stage("Stage 5b: legacy build complete")
+
+	# ── Stage 5.5: critic + fixer pass (silent fail, Gemini Flash) ───────────
+	# Reviews the scene against the transcript for intent, spatial, scale,
+	# lighting, animation and physics issues.  Runs only when Gemini is
+	# configured; falls through to the original scene on any failure.
+	stage_start = time.perf_counter()
+	scene = critique_and_fix(scene, transcript)
+	logger.info(
+		"Stage 5.5: critic/fixer complete (%dms)",
+		int((time.perf_counter() - stage_start) * 1000),
+	)
+	_print_stage("Stage 5.5: critic/fixer complete")
 
 	# ── Stage 6: validate ────────────────────────────────────────────────────
 	stage_start = time.perf_counter()

@@ -61,25 +61,64 @@ export interface MaterialDef {
 
 // ─── Animation ────────────────────────────────────────────────────────────────
 
-export type AnimationType = "none" | "orbit" | "spin"
+export type AnimationType = "none" | "orbit" | "spin" | "physics"
 
-export interface AnimationDef {
-  type: AnimationType
-  /** orbit: world-space center point (ignored when center_ref is set) */
-  center?: [number, number, number]
-  /**
-   * orbit: follow another object's live world position.
-   * Only meaningful for non-parented objects — parented objects orbit in
-   * parent-local space and should use `center` instead.
-   */
-  center_ref?: string
-  /** orbit / spin: rotation axis, default [0,1,0] */
-  axis?: [number, number, number]
-  /** radians/sec */
-  speed?: number
-  /** orbit: starting angle offset in radians */
-  phase?: number
+export type PhysicsType = "gravity" | "shm" | "pendulum" | "projectile"
+
+/** Physics animation — generalized simulation driven by the LLM per scene context */
+export interface PhysicsAnimationDef {
+  type: "physics"
+  physics_type: PhysicsType
+  /** gravity / projectile: gravitational acceleration (9.8=earth, 1.6=moon, 3.7=mars, 24.8=jupiter, 0.6=asteroid) */
+  g?: number
+  /** gravity / projectile: y-level of the floor; auto-repaired if >= object start y */
+  floor_y?: number
+  /** gravity / projectile: energy retained per bounce, 0–1 */
+  restitution?: number
+  /** shm: oscillation axis, defaults to "y" */
+  axis?: "x" | "y" | "z"
+  /** shm / pendulum: max displacement (shm) or max angle in radians (pendulum) */
+  amplitude?: number
+  /** shm / pendulum: cycles per second */
+  frequency?: number
+  /** all types: decay coefficient — 0=perpetual, 0.05=slow decay, 0.5=fast decay */
+  damping?: number
+  /** pendulum: world-space pivot point; MUST be above the bob's starting y position */
+  pivot?: [number, number, number]
+  /** pendulum: arm length hint; overridden at render time by actual pivot–bob distance */
+  arm_length?: number
+  /** projectile: initial velocity vector [vx, vy, vz] */
+  initial_velocity?: [number, number, number]
 }
+
+/**
+ * Animation is a strict discriminated union — only fields valid for the
+ * active `type` are present.  Renderers narrow by `type` before accessing
+ * type-specific fields.
+ */
+export type AnimationDef =
+  | { type: "none" }
+  | {
+      type: "orbit"
+      /** world-space center (ignored when center_ref is set) */
+      center?: [number, number, number]
+      /** follow another object's live world position; only for non-parented objects */
+      center_ref?: string
+      /** rotation axis, default [0,1,0] */
+      axis?: [number, number, number]
+      /** radians/sec */
+      speed?: number
+      /** starting angle offset in radians */
+      phase?: number
+    }
+  | {
+      type: "spin"
+      /** rotation axis, default [0,1,0] */
+      axis?: [number, number, number]
+      /** radians/sec */
+      speed?: number
+    }
+  | PhysicsAnimationDef
 
 // ─── Object ───────────────────────────────────────────────────────────────────
 
@@ -145,10 +184,11 @@ export interface ValidationResult {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const VALID_OBJECT_TYPES: readonly ObjectType[]        = ["primitive", "mesh"]
-export const VALID_GEOM_TYPES:   readonly PrimitiveGeomType[] = ["sphere", "box", "cylinder", "plane", "ring", "capsule", "torus"]
-export const VALID_ANIM_TYPES:   readonly AnimationType[]     = ["none", "orbit", "spin"]
-export const VALID_LIGHT_TYPES:  readonly LightType[]         = ["ambient", "directional", "point", "spot"]
+export const VALID_OBJECT_TYPES:  readonly ObjectType[]        = ["primitive", "mesh"]
+export const VALID_GEOM_TYPES:    readonly PrimitiveGeomType[] = ["sphere", "box", "cylinder", "plane", "ring", "capsule", "torus"]
+export const VALID_ANIM_TYPES:    readonly AnimationType[]     = ["none", "orbit", "spin", "physics"]
+export const VALID_PHYSICS_TYPES: readonly PhysicsType[]      = ["gravity", "shm", "pendulum", "projectile"]
+export const VALID_LIGHT_TYPES:   readonly LightType[]         = ["ambient", "directional", "point", "spot"]
 
 export const DEFAULT_CAMERA: CameraDef = {
   position: [0, 5, 20],
@@ -285,36 +325,98 @@ function validateGeometry(raw: unknown, prefix: string): { geom: GeometryDef | n
 
 function validateAnimation(raw: unknown, prefix: string): { anim: AnimationDef | null; errors: string[] } {
   if (raw === undefined || raw === null) return { anim: { type: "none" }, errors: [] }
-
   if (typeof raw !== "object" || Array.isArray(raw)) {
     return { anim: null, errors: [`${prefix}.animation must be an object`] }
   }
   const a = raw as Record<string, unknown>
-  const errors: string[] = []
 
   if (!VALID_ANIM_TYPES.includes(a.type as AnimationType)) {
     return { anim: null, errors: [`${prefix}.animation.type must be one of ${VALID_ANIM_TYPES.join("|")}, got "${a.type}"`] }
   }
 
-  if (a.center     !== undefined && !isVec3(a.center))          errors.push(`${prefix}.animation.center must be [x,y,z]`)
-  if (a.axis       !== undefined && !isVec3(a.axis))            errors.push(`${prefix}.animation.axis must be [x,y,z]`)
-  if (a.center_ref !== undefined && typeof a.center_ref !== "string") errors.push(`${prefix}.animation.center_ref must be a string`)
-  if (a.speed      !== undefined && !isNum(a.speed))            errors.push(`${prefix}.animation.speed must be a finite number`)
-  if (a.phase      !== undefined && !isNum(a.phase))            errors.push(`${prefix}.animation.phase must be a finite number`)
+  // ── none ──────────────────────────────────────────────────────────────────
+  if (a.type === "none") return { anim: { type: "none" }, errors: [] }
 
-  if (errors.length) return { anim: null, errors }
-
-  return {
-    anim: {
-      type:       a.type       as AnimationType,
-      center:     a.center     as [number,number,number] | undefined,
-      center_ref: a.center_ref as string | undefined,
-      axis:       a.axis       as [number,number,number] | undefined,
-      speed:      a.speed      as number | undefined,
-      phase:      a.phase      as number | undefined,
-    },
-    errors: [],
+  // ── orbit ─────────────────────────────────────────────────────────────────
+  if (a.type === "orbit") {
+    const errors: string[] = []
+    if (a.center     !== undefined && !isVec3(a.center))             errors.push(`${prefix}.animation.center must be [x,y,z]`)
+    if (a.axis       !== undefined && !isVec3(a.axis))               errors.push(`${prefix}.animation.axis must be [x,y,z]`)
+    if (a.center_ref !== undefined && typeof a.center_ref !== "string") errors.push(`${prefix}.animation.center_ref must be a string`)
+    if (a.speed      !== undefined && !isNum(a.speed))               errors.push(`${prefix}.animation.speed must be a finite number`)
+    if (a.phase      !== undefined && !isNum(a.phase))               errors.push(`${prefix}.animation.phase must be a finite number`)
+    if (errors.length) return { anim: null, errors }
+    return {
+      anim: {
+        type:       "orbit",
+        center:     isVec3(a.center)                   ? a.center as [number,number,number] : undefined,
+        center_ref: typeof a.center_ref === "string"   ? a.center_ref                      : undefined,
+        axis:       isVec3(a.axis)                     ? a.axis   as [number,number,number] : undefined,
+        speed:      isNum(a.speed)                     ? a.speed  as number                : undefined,
+        phase:      isNum(a.phase)                     ? a.phase  as number                : undefined,
+      },
+      errors: [],
+    }
   }
+
+  // ── spin ──────────────────────────────────────────────────────────────────
+  if (a.type === "spin") {
+    const errors: string[] = []
+    if (a.axis  !== undefined && !isVec3(a.axis)) errors.push(`${prefix}.animation.axis must be [x,y,z]`)
+    if (a.speed !== undefined && !isNum(a.speed)) errors.push(`${prefix}.animation.speed must be a finite number`)
+    if (errors.length) return { anim: null, errors }
+    return {
+      anim: {
+        type:  "spin",
+        axis:  isVec3(a.axis) ? a.axis as [number,number,number] : undefined,
+        speed: isNum(a.speed) ? a.speed as number                : undefined,
+      },
+      errors: [],
+    }
+  }
+
+  // ── physics ───────────────────────────────────────────────────────────────
+  if (a.type === "physics") {
+    if (!VALID_PHYSICS_TYPES.includes(a.physics_type as PhysicsType)) {
+      return {
+        anim: null,
+        errors: [`${prefix}.animation.physics_type must be one of ${VALID_PHYSICS_TYPES.join("|")}, got "${a.physics_type}"`],
+      }
+    }
+
+    // Clamp: silently bring values into valid range rather than rejecting
+    const clamp = (v: unknown, lo: number, hi: number): number | undefined => {
+      if (typeof v !== "number" || !isFinite(v)) return undefined
+      return Math.max(lo, Math.min(hi, v))
+    }
+
+    const phys: PhysicsAnimationDef = {
+      type:         "physics",
+      physics_type: a.physics_type as PhysicsType,
+    }
+
+    const g           = clamp(a.g,           0.1, 30.0);  if (g           !== undefined) phys.g           = g
+    const restitution = clamp(a.restitution,  0,   1.0);  if (restitution !== undefined) phys.restitution = restitution
+    const amplitude   = clamp(a.amplitude,    0,  20.0);  if (amplitude   !== undefined) phys.amplitude   = amplitude
+    const frequency   = clamp(a.frequency,  0.01, 10.0);  if (frequency   !== undefined) phys.frequency   = frequency
+    const damping     = clamp(a.damping,      0,   2.0);  if (damping     !== undefined) phys.damping     = damping
+    const arm_length  = clamp(a.arm_length,  0.1, 20.0);  if (arm_length  !== undefined) phys.arm_length  = arm_length
+
+    // floor_y: pass through as-is (floor_y auto-repair is done at Python validation time)
+    if (isNum(a.floor_y)) phys.floor_y = a.floor_y as number
+
+    if (isVec3(a.pivot))            phys.pivot            = a.pivot            as [number,number,number]
+    if (isVec3(a.initial_velocity)) phys.initial_velocity = a.initial_velocity as [number,number,number]
+
+    // SHM oscillation axis — string "x"|"y"|"z", distinct from orbit/spin axis (vec3)
+    if (typeof a.axis === "string" && ["x","y","z"].includes(a.axis)) {
+      phys.axis = a.axis as "x" | "y" | "z"
+    }
+
+    return { anim: phys, errors: [] }
+  }
+
+  return { anim: { type: "none" }, errors: [] }
 }
 
 // ─── Object validation ────────────────────────────────────────────────────────

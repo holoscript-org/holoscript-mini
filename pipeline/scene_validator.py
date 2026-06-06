@@ -1,7 +1,7 @@
 """
 Python port of gui/lib/sceneFactory.ts -> validateScene().
 
-MIRROR STATUS: synchronized with sceneFactory.ts as of 2026-05-07.
+MIRROR STATUS: synchronized with sceneFactory.ts as of 2026-06-06.
 If sceneFactory.ts is modified, update this file and the date above.
 
 Corresponding TypeScript lines:
@@ -22,10 +22,25 @@ import re
 from pathlib import Path
 from typing import Any
 
-VALID_OBJECT_TYPES = {"primitive", "mesh"}
-VALID_GEOM_TYPES = {"sphere", "box", "cylinder", "plane", "ring", "capsule", "torus"}
-VALID_ANIM_TYPES = {"none", "orbit", "spin"}
-VALID_LIGHT_TYPES = {"ambient", "directional", "point", "spot"}
+from core.utils.logger import get_logger
+
+logger = get_logger("scene_validator")
+
+VALID_OBJECT_TYPES  = {"primitive", "mesh"}
+VALID_GEOM_TYPES    = {"sphere", "box", "cylinder", "plane", "ring", "capsule", "torus"}
+VALID_ANIM_TYPES    = {"none", "orbit", "spin", "physics"}
+VALID_PHYSICS_TYPES = {"gravity", "shm", "pendulum", "projectile"}
+VALID_LIGHT_TYPES   = {"ambient", "directional", "point", "spot"}
+
+# Physics numeric clamps: (min, max).  Values outside these are clamped silently.
+_PHYSICS_CLAMPS: dict[str, tuple[float, float]] = {
+    "g":           (0.1,  30.0),
+    "restitution": (0.0,   1.0),
+    "amplitude":   (0.0,  20.0),
+    "frequency":   (0.01, 10.0),
+    "damping":     (0.0,   2.0),
+    "arm_length":  (0.1,  20.0),
+}
 
 DEFAULT_CAMERA = {"position": [0, 5, 20], "target": [0, 0, 0], "fov": 65}
 DEFAULT_LIGHTS = [
@@ -185,7 +200,7 @@ def _validate_geometry(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
 	return geom, []
 
 
-def _validate_animation(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
+def _validate_animation(raw: Any, prefix: str, position: list | None = None) -> tuple[dict | None, list[str]]:
 	if raw is None:
 		return {"type": "none"}, []
 	if not isinstance(raw, dict):
@@ -197,31 +212,101 @@ def _validate_animation(raw: Any, prefix: str) -> tuple[dict | None, list[str]]:
 			f'{prefix}.animation.type must be one of {"|".join(sorted(VALID_ANIM_TYPES))}, got "{t}"'
 		]
 
-	errors: list[str] = []
-	if raw.get("center") is not None and not _is_vec3(raw["center"]):
-		errors.append(f"{prefix}.animation.center must be [x,y,z]")
-	if raw.get("axis") is not None and not _is_vec3(raw["axis"]):
-		errors.append(f"{prefix}.animation.axis must be [x,y,z]")
-	if raw.get("center_ref") is not None and not isinstance(raw["center_ref"], str):
-		errors.append(f"{prefix}.animation.center_ref must be a string")
-	if raw.get("speed") is not None and not _is_num(raw["speed"]):
-		errors.append(f"{prefix}.animation.speed must be a finite number")
-	if raw.get("phase") is not None and not _is_num(raw["phase"]):
-		errors.append(f"{prefix}.animation.phase must be a finite number")
+	# ── none ─────────────────────────────────────────────────────────────────
+	if t == "none":
+		return {"type": "none"}, []
 
-	if errors:
-		return None, errors
+	# ── orbit ─────────────────────────────────────────────────────────────────
+	if t == "orbit":
+		errors: list[str] = []
+		if raw.get("center") is not None and not _is_vec3(raw["center"]):
+			errors.append(f"{prefix}.animation.center must be [x,y,z]")
+		if raw.get("axis") is not None and not _is_vec3(raw["axis"]):
+			errors.append(f"{prefix}.animation.axis must be [x,y,z]")
+		if raw.get("center_ref") is not None and not isinstance(raw["center_ref"], str):
+			errors.append(f"{prefix}.animation.center_ref must be a string")
+		if raw.get("speed") is not None and not _is_num(raw["speed"]):
+			errors.append(f"{prefix}.animation.speed must be a finite number")
+		if raw.get("phase") is not None and not _is_num(raw["phase"]):
+			errors.append(f"{prefix}.animation.phase must be a finite number")
+		if errors:
+			return None, errors
+		anim: dict = {"type": "orbit"}
+		for k in ("center", "center_ref", "axis", "speed", "phase"):
+			if raw.get(k) is not None:
+				anim[k] = raw[k]
+		return anim, []
 
-	anim = {"type": t}
-	optional = {
-		"center": raw.get("center"),
-		"center_ref": raw.get("center_ref"),
-		"axis": raw.get("axis"),
-		"speed": raw.get("speed"),
-		"phase": raw.get("phase"),
-	}
-	anim.update({k: v for k, v in optional.items() if v is not None})
-	return anim, []
+	# ── spin ──────────────────────────────────────────────────────────────────
+	if t == "spin":
+		errors = []
+		if raw.get("axis") is not None and not _is_vec3(raw["axis"]):
+			errors.append(f"{prefix}.animation.axis must be [x,y,z]")
+		if raw.get("speed") is not None and not _is_num(raw["speed"]):
+			errors.append(f"{prefix}.animation.speed must be a finite number")
+		if errors:
+			return None, errors
+		anim = {"type": "spin"}
+		for k in ("axis", "speed"):
+			if raw.get(k) is not None:
+				anim[k] = raw[k]
+		return anim, []
+
+	# ── physics ───────────────────────────────────────────────────────────────
+	if t == "physics":
+		physics_type = raw.get("physics_type")
+		if physics_type not in VALID_PHYSICS_TYPES:
+			return None, [
+				f'{prefix}.animation.physics_type must be one of '
+				f'{"|".join(sorted(VALID_PHYSICS_TYPES))}, got "{physics_type}"'
+			]
+
+		anim = {"type": "physics", "physics_type": physics_type}
+
+		# Clamp all numeric physics params into valid ranges (auto-correct, never reject)
+		for field, (lo, hi) in _PHYSICS_CLAMPS.items():
+			val = raw.get(field)
+			if val is not None and isinstance(val, (int, float)) and math.isfinite(val):
+				clamped = max(lo, min(hi, val))
+				if clamped != val:
+					logger.debug(
+						"%s.animation.%s clamped %.4f → %.4f", prefix, field, val, clamped
+					)
+				anim[field] = clamped
+
+		# floor_y auto-repair: if floor_y >= object's starting y, push it below
+		if physics_type in ("gravity", "projectile"):
+			floor_y = raw.get("floor_y")
+			if floor_y is not None and isinstance(floor_y, (int, float)) and math.isfinite(floor_y):
+				start_y = float((position or [0, 0, 0])[1]) if isinstance(position, list) and len(position) >= 2 else 0.0
+				if floor_y >= start_y:
+					repaired = start_y - 3.0
+					logger.debug(
+						"%s.animation.floor_y auto-repaired %.2f → %.2f (was at/above start_y %.2f)",
+						prefix, floor_y, repaired, start_y,
+					)
+					floor_y = repaired
+				anim["floor_y"] = floor_y
+
+		# Pivot point (pendulum)
+		pivot = raw.get("pivot")
+		if pivot is not None and _is_vec3(pivot):
+			anim["pivot"] = pivot
+
+		# Initial velocity (projectile)
+		iv = raw.get("initial_velocity")
+		if iv is not None and _is_vec3(iv):
+			anim["initial_velocity"] = iv
+
+		# SHM oscillation axis — string "x"|"y"|"z"
+		if physics_type == "shm":
+			axis = raw.get("axis")
+			if axis in ("x", "y", "z"):
+				anim["axis"] = axis
+
+		return anim, []
+
+	return {"type": "none"}, []
 
 
 def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
@@ -268,7 +353,7 @@ def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
 	if raw.get("label") is not None and not isinstance(raw["label"], str):
 		errors.append(f"{prefix}: label must be a string")
 
-	anim, ae = _validate_animation(raw.get("animation"), prefix)
+	anim, ae = _validate_animation(raw.get("animation"), prefix, position=raw.get("position"))
 	errors.extend(ae)
 
 	position_ok = _is_vec3(raw.get("position"))

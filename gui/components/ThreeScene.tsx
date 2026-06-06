@@ -15,7 +15,7 @@
 
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber"
-import { Environment, OrbitControls, PerspectiveCamera, Text, useGLTF, useTexture } from "@react-three/drei"
+import { Environment, OrbitControls, PerspectiveCamera, useGLTF, useTexture } from "@react-three/drei"
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js"
 import * as THREE from "three"
 import type { GestureControlRefs } from "@/hooks/useGestureControl"
@@ -24,6 +24,7 @@ import {
   GeometryDef,
   LightDef,
   MaterialDef,
+  PhysicsAnimationDef,
   SceneDef,
   SceneObject,
   validateScene,
@@ -145,9 +146,13 @@ function PrimitiveGeom({ geom, mat }: GeomProps) {
     case "cylinder":
       return <CylinderGeom geom={geom} mat={mat} />
     case "plane":
+      // No baked-in rotation here — orientation is fully controlled by obj.rotation.
+      // The LLM (and _normalize_object) always emits rotation:[-90,0,0] for horizontal
+      // floors; applying it twice would make the plane edge-on to the camera.
+      // Dimensions: width × height (not depth — planes don't have depth).
       return (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[geom.width ?? 1, geom.depth ?? 1]} />
+        <mesh receiveShadow>
+          <planeGeometry args={[geom.width ?? 10, geom.height ?? geom.depth ?? 10]} />
           <meshStandardMaterial {...buildMaterialParams(mat)} side={THREE.DoubleSide} />
         </mesh>
       )
@@ -243,9 +248,9 @@ function MeshObject({ obj }: { obj: SceneObject }) {
 // ─── Single scene object node ─────────────────────────────────────────────────
 
 function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React.ReactNode }) {
-  const registry = useContext(ObjectRegistry)
+  const registry    = useContext(ObjectRegistry)
   const dragOffsets = useContext(DragOffsetContext)
-  const groupRef  = useRef<THREE.Group>(null!)
+  const groupRef    = useRef<THREE.Group>(null!)
 
   // Register this group for center_ref lookup and raycast identification
   useEffect(() => {
@@ -257,31 +262,56 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
   const frozen     = useContext(FrozenContext)
   const selectedId = useContext(SelectedContext)
   const isSelected = selectedId === obj.id
-  const anim      = obj.animation ?? { type: "none" }
-  const isOrbit   = anim.type === "orbit"
-  const hasParent = !!obj.parent
+  const anim       = obj.animation ?? { type: "none" as const }
+  const hasParent  = !!obj.parent
 
-  // Orbit bookkeeping (local-space for parented, world-space otherwise)
-  const staticCenter = anim.center ?? [0, 0, 0]
+  // Narrow animation type once — keeps useFrame clean
+  const orbitAnim   = anim.type === "orbit"   ? anim : null
+  const spinAnim    = anim.type === "spin"    ? anim : null
+  const physicsAnim = anim.type === "physics" ? (anim as PhysicsAnimationDef) : null
+
+  // ── Orbit bookkeeping ────────────────────────────────────────────────────
+  const staticCenter = orbitAnim?.center ?? ([0, 0, 0] as [number, number, number])
   const dx0 = obj.position[0] - staticCenter[0]
   const dz0 = obj.position[2] - staticCenter[2]
   const orbitRadius = useRef(Math.sqrt(dx0 * dx0 + dz0 * dz0))
-  const orbitAngle  = useRef((anim.phase ?? 0) + Math.atan2(dz0, dx0))
+  const orbitAngle  = useRef((orbitAnim?.phase ?? 0) + Math.atan2(dz0, dx0))
   const orbitY      = useRef(obj.position[1])
 
-  useFrame((_, delta) => {
+  // ── Physics state ────────────────────────────────────────────────────────
+  // vel:         current velocity (gravity / projectile)
+  // tStart:      clock.elapsedTime when animation was initialized
+  //              closed-form animations (shm, pendulum) use localT = elapsed - tStart
+  //              so damping always starts from 0, even after long app uptime.
+  // initialized: false until first frame after mount or scene change
+  const physicsRef = useRef<{
+    vel:         THREE.Vector3
+    tStart:      number
+    initialized: boolean
+  }>({ vel: new THREE.Vector3(), tStart: 0, initialized: false })
+
+  // Capture the object's initial JSON position as the physics origin.
+  // Reset when obj.id changes (new scene) — guards against same-ID reuse across scenes.
+  const basePosRef = useRef<[number, number, number]>(obj.position)
+  useEffect(() => {
+    basePosRef.current = obj.position
+    physicsRef.current = { vel: new THREE.Vector3(), tStart: 0, initialized: false }
+  }, [obj.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useFrame((state, delta) => {
     if (!groupRef.current || frozen) return
 
-    const offset = dragOffsets.current.get(obj.id)
+    const elapsed = state.clock.elapsedTime
+    const offset  = dragOffsets.current.get(obj.id)
 
-    if (isOrbit) {
+    // ── Orbit position ─────────────────────────────────────────────────────
+    if (orbitAnim) {
       let cx = staticCenter[0], cy = orbitY.current, cz = staticCenter[2]
-      // center_ref: world-space lookup, only meaningful for non-parented objects
-      if (!hasParent && anim.center_ref) {
-        const refGroup = registry.current.get(anim.center_ref)
+      if (!hasParent && orbitAnim.center_ref) {
+        const refGroup = registry.current.get(orbitAnim.center_ref)
         if (refGroup) { cx = refGroup.position.x; cy = refGroup.position.y; cz = refGroup.position.z }
       }
-      orbitAngle.current += (anim.speed ?? 1.0) * delta
+      orbitAngle.current += (orbitAnim.speed ?? 1.0) * delta
       groupRef.current.position.x = cx + orbitRadius.current * Math.cos(orbitAngle.current)
       groupRef.current.position.y = cy
       groupRef.current.position.z = cz + orbitRadius.current * Math.sin(orbitAngle.current)
@@ -290,17 +320,120 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
         groupRef.current.position.y += offset.y
         groupRef.current.position.z += offset.z
       }
+
+    // ── Physics position ────────────────────────────────────────────────────
+    } else if (physicsAnim) {
+      // One-time init on first frame: capture tStart and set initial velocity
+      if (!physicsRef.current.initialized) {
+        physicsRef.current.tStart = elapsed
+        if (physicsAnim.physics_type === "projectile") {
+          const iv = physicsAnim.initial_velocity ?? [0, 5, 0]
+          physicsRef.current.vel.set(iv[0], iv[1], iv[2])
+        } else {
+          physicsRef.current.vel.set(0, 0, 0)
+        }
+        physicsRef.current.initialized = true
+      }
+
+      const localT  = elapsed - physicsRef.current.tStart
+      const basePos = basePosRef.current
+
+      switch (physicsAnim.physics_type) {
+
+        // ── Gravity: velocity accumulation + floor bounce ──────────────────
+        case "gravity": {
+          const g          = physicsAnim.g           ?? 9.8
+          const floorY     = physicsAnim.floor_y     ?? (basePos[1] - 3.0)
+          const restitution = physicsAnim.restitution ?? 0.7
+          physicsRef.current.vel.y -= g * delta
+          groupRef.current.position.y += physicsRef.current.vel.y * delta
+          if (groupRef.current.position.y <= floorY) {
+            groupRef.current.position.y   = floorY
+            physicsRef.current.vel.y      = Math.abs(physicsRef.current.vel.y) * restitution
+          }
+          break
+        }
+
+        // ── SHM: closed-form, starts at rest at basePos, no teleport ───────
+        case "shm": {
+          const axis      = physicsAnim.axis      ?? "y"
+          const amplitude = physicsAnim.amplitude ?? 2.0
+          const frequency = physicsAnim.frequency ?? 0.5
+          const damping   = physicsAnim.damping   ?? 0.0
+          // sin formula: at localT=0 → disp=0, object sits at basePos
+          const disp = amplitude
+            * Math.sin(2 * Math.PI * frequency * localT)
+            * Math.exp(-damping * localT)
+          groupRef.current.position.x = basePos[0] + (axis === "x" ? disp : 0)
+          groupRef.current.position.y = basePos[1] + (axis === "y" ? disp : 0)
+          groupRef.current.position.z = basePos[2] + (axis === "z" ? disp : 0)
+          break
+        }
+
+        // ── Pendulum: closed-form, arm derived from position–pivot distance ─
+        // Using sin formula so at localT=0, theta=0, bob hangs directly below
+        // pivot — position exactly equals basePos with no teleport at frame 0.
+        case "pendulum": {
+          const pivot = physicsAnim.pivot ?? ([basePos[0], basePos[1] + 4, basePos[2]] as [number,number,number])
+          // Derive arm from the vertical distance between bob and pivot.
+          // This is the single source of truth: if the LLM places the bob
+          // directly below the pivot (standard form), arm is exact.
+          // Explicit arm_length is only used as a fallback when there is no
+          // y-offset between position and pivot.
+          const armFromPos = Math.abs(pivot[1] - basePos[1])
+          const arm        = armFromPos > 0.01 ? armFromPos : (physicsAnim.arm_length ?? 4.0)
+          const frequency  = physicsAnim.frequency ?? 0.4
+          const ampRad     = physicsAnim.amplitude ?? (Math.PI / 4)
+          const damping    = physicsAnim.damping   ?? 0.02
+          const theta      = ampRad
+            * Math.sin(2 * Math.PI * frequency * localT)
+            * Math.exp(-damping * localT)
+          groupRef.current.position.x = pivot[0] + arm * Math.sin(theta)
+          groupRef.current.position.y = pivot[1] - arm * Math.cos(theta)
+          groupRef.current.position.z = pivot[2]
+          break
+        }
+
+        // ── Projectile: initial velocity + gravity, floor bounce ────────────
+        case "projectile": {
+          const g           = physicsAnim.g           ?? 9.8
+          const floorY      = physicsAnim.floor_y     ?? (basePos[1] - 10.0)
+          const restitution = physicsAnim.restitution ?? 0.3
+          physicsRef.current.vel.y -= g * delta
+          groupRef.current.position.x += physicsRef.current.vel.x * delta
+          groupRef.current.position.y += physicsRef.current.vel.y * delta
+          groupRef.current.position.z += physicsRef.current.vel.z * delta
+          if (groupRef.current.position.y <= floorY) {
+            groupRef.current.position.y  = floorY
+            physicsRef.current.vel.y     = Math.abs(physicsRef.current.vel.y) * restitution
+            // Lose some horizontal momentum on impact
+            physicsRef.current.vel.x    *= 0.85
+            physicsRef.current.vel.z    *= 0.85
+          }
+          break
+        }
+      }
+
+      // Apply drag offset on top of physics position
+      if (offset) {
+        groupRef.current.position.x += offset.x
+        groupRef.current.position.y += offset.y
+        groupRef.current.position.z += offset.z
+      }
+
+    // ── Static position with drag ─────────────────────────────────────────
     } else if (offset) {
       groupRef.current.position.set(
         obj.position[0] + offset.x,
         obj.position[1] + offset.y,
-        obj.position[2] + offset.z
+        obj.position[2] + offset.z,
       )
     }
 
-    if (anim.type === "spin") {
-      const axis  = anim.axis ?? [0, 1, 0]
-      const speed = (anim.speed ?? 1.0) * delta
+    // ── Spin rotation (independent of position) ──────────────────────────
+    if (spinAnim) {
+      const axis  = spinAnim.axis ?? [0, 1, 0]
+      const speed = (spinAnim.speed ?? 1.0) * delta
       groupRef.current.rotation.x += axis[0] * speed
       groupRef.current.rotation.y += axis[1] * speed
       groupRef.current.rotation.z += axis[2] * speed
@@ -316,15 +449,6 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
       ] as [number, number, number])
     : undefined
 
-  // Label: stay above geometry
-  const geomSize = obj.type === "primitive"
-    ? Math.max(
-        (obj.geometry?.radius ?? 1) * (obj.scale?.[1] ?? 1),
-        ((obj.geometry?.height ?? 1) / 2) * (obj.scale?.[1] ?? 1)
-      )
-    : (obj.scale?.[1] ?? 1)
-  const labelY = geomSize + 0.4
-
   return (
     <group
       ref={groupRef}
@@ -339,20 +463,6 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
         <Suspense fallback={null}>
           <MeshObject obj={obj} />
         </Suspense>
-      )}
-      {obj.label && (
-        <Text
-          position={[0, labelY / (obj.scale?.[1] ?? 1), 0]}
-          fontSize={0.35}
-          color="#00ffff"
-          anchorX="center"
-          anchorY="bottom"
-          outlineWidth={0.025}
-          outlineColor="#000000"
-          renderOrder={1}
-        >
-          {obj.label}
-        </Text>
       )}
       {/* Selection glow — cyan point light at object centre */}
       {isSelected && (

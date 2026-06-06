@@ -141,7 +141,8 @@ export default function HologramDashboard() {
           return
         }
 
-        // Poll /command/status until the pipeline finishes, then refresh scene
+        // Poll /command/status until the pipeline finishes, then refresh scene.
+        // Gemini 2.5 Pro can take 60–90 s for complex scenes — poll up to 3 min.
         const timer = setInterval(async () => {
           try {
             const statusRes = await fetch("http://localhost:8000/command/status", { cache: "no-store" })
@@ -157,8 +158,8 @@ export default function HologramDashboard() {
           }
         }, 1500)
 
-        // Safety: stop polling after 60 s regardless
-        setTimeout(() => clearInterval(timer), 60_000)
+        // Safety: stop polling after 3 min (Gemini architect can take 60–90 s)
+        setTimeout(() => clearInterval(timer), 180_000)
       } catch (err) {
         console.error("Failed to send command to backend:", err)
       }

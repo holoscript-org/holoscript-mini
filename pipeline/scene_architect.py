@@ -20,14 +20,55 @@ from core.utils.logger import get_logger
 
 logger = get_logger("scene_architect")
 
-# Use a larger model for structured scene generation — smaller models
-# produce malformed JSON on complex multi-object scenes.
-_ARCHITECT_MODEL = "llama-3.3-70b-versatile"
-_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+# ── Model config ──────────────────────────────────────────────────────────────
+# Primary: Gemini 2.5 Pro via direct API (GEMINI_API_KEY)
+# Fallback: Groq Llama 3.3 70B (GROQ_API_KEY)
+_GROQ_MODEL = "llama-3.3-70b-versatile"
+_GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
+
+try:
+    from google import genai as _genai
+    from google.genai.types import HttpOptions as _HttpOptions
+    from google.genai import types as _genai_types
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
 
 
-def _call_architect(prompt: str, system: str) -> str | None:
-    """Direct Groq call with json_object response format enforced."""
+def _make_vertex_client():
+    """Return a Vertex AI genai client using ADC (no API key required)."""
+    return _genai.Client(
+        vertexai=True,
+        project=os.getenv("GCP_PROJECT", "reportevaluator"),
+        location=os.getenv("GCP_LOCATION", "us-central1"),
+        http_options=_HttpOptions(api_version="v1"),
+    )
+
+
+def _call_architect_gemini(prompt: str, system: str) -> str | None:
+    """Gemini 2.5 Pro via Vertex AI (ADC). Returns raw text or None."""
+    if not _GENAI_AVAILABLE:
+        return None
+    model = os.getenv("GEMINI_ARCHITECT_MODEL", "gemini-2.5-pro")
+    try:
+        client = _make_vertex_client()
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=_genai_types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                temperature=0.4,
+            ),
+        )
+        return response.text
+    except Exception as exc:
+        logger.error("Architect Gemini call failed: %s", exc)
+        return None
+
+
+def _call_architect_groq(prompt: str, system: str) -> str | None:
+    """Groq Llama 3.3 70B fallback with json_object response format enforced."""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return None
@@ -36,7 +77,7 @@ def _call_architect(prompt: str, system: str) -> str | None:
         "Content-Type": "application/json",
     }
     payload = {
-        "model": _ARCHITECT_MODEL,
+        "model": _GROQ_MODEL,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system},
@@ -51,6 +92,16 @@ def _call_architect(prompt: str, system: str) -> str | None:
     except Exception as exc:
         logger.error("Architect Groq call failed: %s", exc)
         return None
+
+
+def _call_architect(prompt: str, system: str) -> str | None:
+    """Try Gemini 2.5 Pro first; fall back to Groq on any failure."""
+    raw = _call_architect_gemini(prompt, system)
+    if raw:
+        logger.info("Scene architect: using Gemini")
+        return raw
+    logger.info("Scene architect: Gemini unavailable, falling back to Groq")
+    return _call_architect_groq(prompt, system)
 
 # ---------------------------------------------------------------------------
 # Schema block — mirrors scene_validator.py exactly
@@ -75,9 +126,10 @@ Object (primitive):
     "material": { "type":"standard", "color":"#rrggbb", "roughness":0-1, "metalness":0-1,
       optional: "emissive":"#rrggbb", "emissiveIntensity":0-5,
                 "opacity":0-1, "transparent":true },
-    "animation": { "type":"none|orbit|spin",
-      orbit → "center":[x,y,z], "speed": float, "phase": float (radians, vary per planet)
-      spin  → "axis":[x,y,z],   "speed": float },
+    "animation": { "type":"none|orbit|spin|physics",
+      orbit   → "center":[x,y,z], "speed": float, "phase": float (radians, vary per planet)
+      spin    → "axis":[x,y,z],   "speed": float
+      physics → see PHYSICS ANIMATION section below },
     "parent": "other_id",       ← optional; child position is relative to parent
     "label": "Human-readable"   ← optional, show for key objects only
   }
@@ -214,6 +266,67 @@ END EXAMPLE\
 """
 
 # ---------------------------------------------------------------------------
+# Physics animation prompt block
+# ---------------------------------------------------------------------------
+
+_PHYSICS = """\
+═══ PHYSICS ANIMATION ═══
+Use animation.type = "physics" when the user describes motion that follows natural laws.
+The LLM decides which physics_type fits best — these are never triggered by keywords alone.
+
+When to use each physics_type:
+  gravity    → falling, dropping, bouncing, ball dropping, rain, avalanche
+  pendulum   → swinging, pendulum clock, hanging weight, grandfather clock, wrecking ball
+  shm        → oscillating, vibrating, spring, bobbing, pulsing, wave motion
+  projectile → thrown, launched, fired, arc, ballistic, cannon, trajectory
+
+Schema:
+  {
+    "animation": {
+      "type": "physics",
+      "physics_type": "gravity|shm|pendulum|projectile",
+
+      // gravity / projectile
+      "g": 9.8,            // gravitational acceleration:
+                           //   9.8=earth, 1.6=moon, 3.7=mars, 24.8=jupiter, 0.6=asteroid, 0=weightless
+      "floor_y": -2.0,     // MUST be strictly below the object's starting y position
+      "restitution": 0.7,  // bounce energy retention: 0=dead stop, 1=perfect bounce
+
+      // shm only
+      "axis": "y",         // oscillation axis: "x", "y", or "z"
+      "amplitude": 1.5,    // max displacement from rest position (keep ≤ 30% of scene size)
+      "frequency": 0.5,    // cycles per second
+
+      // pendulum only
+      "pivot": [0, 5, 0],  // MUST have pivot.y > object's starting y position
+      "arm_length": 5.0,   // hint: the renderer derives arm from position–pivot distance
+      "amplitude": 0.785,  // max swing angle in RADIANS (π/4 ≈ 0.785, π/6 ≈ 0.524)
+      "frequency": 0.4,    // cycles per second
+
+      // projectile only
+      "initial_velocity": [2, 8, 0],   // [vx, vy, vz] in units/sec
+
+      // all types
+      "damping": 0.02      // decay coefficient: 0=perpetual, 0.05=slow decay, 0.5=fast decay
+    }
+  }
+
+Critical rules:
+  • g MUST reflect the environment: moon/space/asteroid → g ≤ 2.0, NOT 9.8
+  • floor_y MUST always be strictly below the object's starting y position
+    Example: object at y=2 → floor_y must be < 2, e.g. -1 or 0
+  • amplitude for shm: keep ≤ 30% of the scene's bounding box size
+  • pendulum pivot MUST have y > object starting y (pivot is above the bob)
+    Place the bob (object position) directly below the pivot: same x and z
+    Example: object at [3, 0, 0], pivot at [3, 5, 0], arm_length = 5
+  • For gravity/projectile scenes: add a ground plane object at floor_y
+  • damping = 0 for perpetual motion, 0.02–0.05 for realistic gradual decay
+
+Environment gravity reference:
+  Earth: 9.8 | Moon: 1.6 | Mars: 3.7 | Jupiter: 24.8 | Asteroid: 0.6 | Space: 0.0\
+"""
+
+# ---------------------------------------------------------------------------
 # System prompt assembly
 # ---------------------------------------------------------------------------
 
@@ -224,6 +337,8 @@ Your output is rendered directly in Three.js — correctness and visual quality 
 {_RULES}
 
 {_SCHEMA}
+
+{_PHYSICS}
 
 {_EXAMPLE_ORBITAL}
 
@@ -283,7 +398,7 @@ def generate_scene(
         "Generate the complete scene JSON now:"
     )
 
-    logger.info("Scene architect: calling Groq (%s) for '%s'", _ARCHITECT_MODEL, transcript[:60])
+    logger.info("Scene architect: building scene for '%s'", transcript[:60])
     raw = _call_architect(prompt, _SYSTEM)
     if not raw:
         logger.warning("Scene architect: Groq returned nothing")

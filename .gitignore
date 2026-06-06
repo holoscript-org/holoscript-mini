@@ -241,3 +241,4 @@ gui/node_modules/
 gui/.next/
 gui/tsconfig.tsbuildinfo
 
+test.py

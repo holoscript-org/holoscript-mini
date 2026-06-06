@@ -1,9 +1,9 @@
 {
-  "name": "Human Heart",
+  "name": "Solar System",
   "objects": [
     {
-      "id": "human_heart",
-      "type": "mesh",
+      "id": "sun",
+      "type": "primitive",
       "position": [
         0,
         0,
@@ -11,74 +11,458 @@
       ],
       "material": {
         "type": "standard",
+        "color": "#ffdd33",
+        "roughness": 0.4,
+        "metalness": 0,
+        "emissive": "#ff8800",
+        "emissiveIntensity": 1.1
+      },
+      "animation": {
+        "type": "spin",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "speed": 0.05
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 2.5
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Sun"
+    },
+    {
+      "id": "mercury",
+      "type": "primitive",
+      "position": [
+        4,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#999999",
+        "roughness": 0.8,
+        "metalness": 0.1
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 1.607,
+        "phase": 0.5
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.25
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Mercury"
+    },
+    {
+      "id": "venus",
+      "type": "primitive",
+      "position": [
+        6.5,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#d2b48c",
+        "roughness": 0.7,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 1.174,
+        "phase": 1.2
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.45
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Venus"
+    },
+    {
+      "id": "earth",
+      "type": "primitive",
+      "position": [
+        9,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#2060c0",
+        "roughness": 0.6,
+        "metalness": 0.05
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 1,
+        "phase": 2.1
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.5
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Earth"
+    },
+    {
+      "id": "moon",
+      "type": "mesh",
+      "position": [
+        0.8,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
         "color": "#ffffff",
-        "roughness": 0.5,
-        "metalness": 0.0
+        "roughness": 0.9,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 12.1
+      },
+      "parent": "earth",
+      "model": "/assets/meshes/planets/moon.glb",
+      "scale": [
+        0.00014,
+        0.00014,
+        0.00014
+      ]
+    },
+    {
+      "id": "mars",
+      "type": "primitive",
+      "position": [
+        11.5,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#c1440e",
+        "roughness": 0.85,
+        "metalness": 0.1
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 0.802,
+        "phase": 3.5
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.3
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Mars"
+    },
+    {
+      "id": "asteroid_belt",
+      "type": "primitive",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#504030",
+        "roughness": 1,
+        "metalness": 0,
+        "opacity": 0.1,
+        "transparent": true
       },
       "animation": {
         "type": "none"
       },
-      "model": "/assets/meshes/abstract/heart_1.glb",
-      "scale": [
-        2,
-        2,
-        2
+      "geometry": {
+        "type": "ring",
+        "innerRadius": 13,
+        "outerRadius": 15,
+        "thetaSegments": 256
+      },
+      "rotation": [
+        90,
+        0,
+        0
       ],
-      "label": "Human Heart"
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "jupiter",
+      "type": "primitive",
+      "position": [
+        16,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#d8caab",
+        "roughness": 0.7,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 0.434,
+        "phase": 4.2
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 1.2
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Jupiter"
+    },
+    {
+      "id": "saturn",
+      "type": "primitive",
+      "position": [
+        21,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#e3dccb",
+        "roughness": 0.6,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 0.323,
+        "phase": 5.1
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 1
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Saturn"
+    },
+    {
+      "id": "saturn_ring",
+      "type": "primitive",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#c7bba4",
+        "roughness": 0.8,
+        "metalness": 0,
+        "opacity": 0.7,
+        "transparent": true
+      },
+      "animation": {
+        "type": "none"
+      },
+      "parent": "saturn",
+      "geometry": {
+        "type": "ring",
+        "innerRadius": 1.35,
+        "outerRadius": 2.35,
+        "thetaSegments": 128
+      },
+      "rotation": [
+        90,
+        25,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "uranus",
+      "type": "primitive",
+      "position": [
+        26,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#d1e7e8",
+        "roughness": 0.5,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 0.228,
+        "phase": 0.9
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.7
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Uranus"
+    },
+    {
+      "id": "neptune",
+      "type": "primitive",
+      "position": [
+        30,
+        0,
+        0
+      ],
+      "material": {
+        "type": "standard",
+        "color": "#5b95d2",
+        "roughness": 0.4,
+        "metalness": 0
+      },
+      "animation": {
+        "type": "orbit",
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "speed": 0.182,
+        "phase": 2.8
+      },
+      "geometry": {
+        "type": "sphere",
+        "radius": 0.65
+      },
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "label": "Neptune"
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.38,
-      "color": "#ffd7b9",
-      "castShadow": false
-    },
-    {
-      "type": "directional",
-      "intensity": 1.2,
+      "intensity": 0.15,
       "color": "#ffffff",
-      "position": [
-        5,
-        10,
-        5
-      ],
-      "castShadow": true
-    },
-    {
-      "type": "directional",
-      "intensity": 0.8,
-      "color": "#cccccc",
-      "position": [
-        -5,
-        10,
-        -5
-      ],
-      "castShadow": true
+      "castShadow": false
     },
     {
       "type": "point",
-      "intensity": 2.0,
-      "color": "#87ceeb",
+      "intensity": 6,
+      "color": "#ffcc88",
       "position": [
         0,
         0,
-        5
+        0
       ],
       "castShadow": false
+    },
+    {
+      "type": "directional",
+      "intensity": 0.4,
+      "color": "#ffffff",
+      "position": [
+        80,
+        40,
+        30
+      ],
+      "castShadow": true
     }
   ],
   "camera": {
     "position": [
-      0.2,
-      1.4,
-      11.8
+      0,
+      25,
+      65
     ],
     "target": [
       0,
-      -0.4,
-      0.2
+      0,
+      0
     ],
-    "fov": 46
+    "fov": 60
   }
 }
