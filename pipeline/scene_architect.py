@@ -141,6 +141,14 @@ Object (mesh — ONLY if path appears in AVAILABLE MESHES below):
     "animation": {...}, "label": "..." }
   IMPORTANT: For mesh objects always use color "#ffffff" — the GLB has embedded textures;
   any other color will tint/destroy the original appearance.
+  MESH SCALE: All GLB models are auto-normalized to a 2-unit bounding box at load time.
+  So scale [1,1,1] = 1 unit half-size (2 units wide). Use scale relative to that:
+    Single subject (ball, figure, animal): scale [3,3,3] to [5,5,5]
+    Wide floor/ground:  scale [8,1,8] to [12,1,12]
+    Tall structure:     scale [3,6,3]
+  For physics gravity: floor_y = floor_position_y + (object_scale / 2)
+    Example: floor at y=0, basketball scale [0.5,0.5,0.5] → floor_y = 0 + 0.25 = 0.25
+    Starting y for drop: floor_y + 8 to floor_y + 14 for a visible long drop
 
 Lights:
   { "type":"ambient",     "intensity":0-2,  "color":"#rrggbb" }
@@ -156,19 +164,17 @@ Camera: { "position":[x,y,z], "target":[x,y,z], "fov":40-75 }\
 
 _RULES = """\
 ═══ PRIMITIVE vs MESH ═══
-Use primitives for:
+HIGHEST PRIORITY RULE — MESHES OVERRIDE EVERYTHING ELSE:
+  If a concept appears in AVAILABLE MESHES (shown in the prompt), you MUST use
+  type="mesh" for that concept. Do NOT use a primitive. The file is confirmed on disk.
+  This rule overrides all category rules below. No exceptions.
+
+Use primitives for EVERYTHING ELSE, including:
   • ALL astronomical: stars, planets, moons, rings, asteroid belts, galaxies, nebulae
   • ALL atomic / molecular: nucleus, protons, neutrons, electrons, bonds, shells
-  • ALL biological organs built from compound parts: heart chambers, blood vessels,
-    brain lobes, lungs, kidneys, neurons, DNA helix
   • ALL mechanical/structural: gears, orreries, clock faces, crystal lattices,
     bridges, towers, molecules, grids
   • ANY abstract concept, energy field, wave, or geometric arrangement
-
-Use a MESH only when:
-  • The exact concept name appears in AVAILABLE MESHES below
-  • A sphere/box would lose the essential recognisable silhouette (dragon, spaceship,
-    human figure, complex creature)
   • NEVER invent a mesh path — only use paths listed in AVAILABLE MESHES
 
 ═══ LIGHTING ═══
@@ -313,8 +319,10 @@ Schema:
 
 Critical rules:
   • g MUST reflect the environment: moon/space/asteroid → g ≤ 2.0, NOT 9.8
+  • Starting y for gravity/projectile objects: keep between 1.5 and 3.0 so the object
+    is visible in frame from the first frame. NEVER start above y=4.
   • floor_y MUST always be strictly below the object's starting y position
-    Example: object at y=2 → floor_y must be < 2, e.g. -1 or 0
+    Example: object at y=2 → floor_y must be < 2, e.g. 0 or 0.25
   • amplitude for shm: keep ≤ 30% of the scene's bounding box size
   • pendulum pivot MUST have y > object starting y (pivot is above the bob)
     Place the bob (object position) directly below the pivot: same x and z
@@ -353,12 +361,12 @@ OUTPUT RULES:
 - For type=mesh objects always use color="#ffffff" so embedded GLB textures are not tinted.
 - Include at least 3 lights (ambient + key directional + fill/point) for depth and realism.
 - Objects must NOT all sit at [0,0,0] — spread them naturally in 3D space.
-- Mesh objects should be sized visually large enough to be seen (scale ≥ [1,1,1] unless tiny).
+- Mesh objects MUST be scaled large enough to fill the view. Use scale [3,3,3] or larger
+  for a single main-subject mesh. Never leave a mesh at [1,1,1] as the primary object.
+- DO NOT add a ground plane, floor, or surface unless the user explicitly asks for one
+  (e.g. "on a table", "on the ground", "with a floor"). A plane is almost never needed
+  and will overwhelm a small mesh object. Default: no plane.
 - Camera must frame the entire scene; never place it inside objects or too close.
-- If you add a ground/water/floor plane, it MUST be positioned so it does NOT intersect
-  any other object. Place it clearly below (or above) all objects with vertical clearance.
-  Example: mermaid at y=0, water surface plane at y=-2 (below feet) or y=4 (above head).
-  NEVER place a horizontal plane at the same y as an object's center — it will slice it.
 - Omit any field you are unsure about rather than guessing wrong values.
 - NEVER write math expressions or code in JSON values. Pre-compute all numbers yourself.\
 """
@@ -390,8 +398,16 @@ def generate_scene(
         if v and not k.startswith("_")
     }
 
+    if verified_assets:
+        mesh_header = (
+            "AVAILABLE MESHES — YOU MUST use type=\"mesh\" for every concept listed here.\n"
+            "Do NOT use a primitive for these concepts. The GLB files are confirmed on disk.\n"
+        )
+    else:
+        mesh_header = "AVAILABLE MESHES (none — build everything from primitives):\n"
+
     prompt = (
-        f"AVAILABLE MESHES (use ONLY these paths for type=mesh, nothing else):\n"
+        f"{mesh_header}"
         f"{mesh_menu}\n\n"
         f"USER REQUEST: \"{transcript}\"\n"
         f"SEMANTIC INTENT: {json.dumps(intent_summary)}\n\n"

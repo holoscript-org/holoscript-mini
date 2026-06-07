@@ -97,6 +97,8 @@ You receive a scene JSON and a list of specific issues with exact fix instructio
 Apply ONLY the fixes listed. Do not change anything not mentioned in the issues list.
 Do not rewrite the scene. Do not add objects unless the fix explicitly says to add one.
 Do not remove objects unless the fix explicitly says to remove one.
+CRITICAL: If an object has "type":"mesh", you MUST keep it as type="mesh" with its
+original "model" path unchanged. Never convert a mesh object to a primitive.
 Respond with ONLY the corrected scene JSON. No markdown, no explanation.
 """
 
@@ -132,6 +134,7 @@ def _call_flash(client: Any, system_prompt: str, user_prompt: str, max_tokens: i
                 response_mime_type="application/json",
                 temperature=0.1,
                 max_output_tokens=max_tokens,
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
             ),
         )
         return response.text
@@ -170,7 +173,7 @@ def critique_scene(scene: dict, transcript: str, client: Any) -> list[dict]:
         f"USER REQUEST: {json.dumps(transcript)}\n\n"
         f"SCENE JSON: {json.dumps(scene, separators=(',', ':'))}"
     )
-    raw    = _call_flash(client, _CRITIC_SYSTEM, user_prompt, max_tokens=900)
+    raw    = _call_flash(client, _CRITIC_SYSTEM, user_prompt, max_tokens=2000)
     parsed = _extract_json(raw)
     if not isinstance(parsed, dict):
         logger.debug("Critic: malformed response — skipping")
@@ -181,14 +184,60 @@ def critique_scene(scene: dict, transcript: str, client: Any) -> list[dict]:
     return issues if isinstance(issues, list) else []
 
 
-def fix_scene(scene: dict, issues: list[dict], client: Any) -> dict | None:
+def _restore_meshes(original: dict, fixed: dict, allowed_paths: set[str]) -> dict:
+    """
+    Hard guarantee: if the fixer converted a verified mesh object to a primitive,
+    restore it. We trust the disk-verified asset list over the LLM's intent fix.
+    """
+    if not allowed_paths:
+        return fixed
+    original_by_id = {
+        o.get("id"): o
+        for o in original.get("objects", [])
+        if isinstance(o, dict)
+    }
+    fixed_objects = list(fixed.get("objects", []))
+    for i, obj in enumerate(fixed_objects):
+        if not isinstance(obj, dict):
+            continue
+        orig = original_by_id.get(obj.get("id"))
+        if orig is None:
+            continue
+        if orig.get("type") == "mesh" and orig.get("model", "") in allowed_paths:
+            if obj.get("type") != "mesh":
+                fixed_objects[i] = {**obj, "type": "mesh", "model": orig["model"]}
+                logger.info(
+                    "Restored mesh '%s' → '%s' (fixer had converted to %s)",
+                    obj.get("id"), orig["model"], obj.get("type"),
+                )
+    fixed["objects"] = fixed_objects
+    return fixed
+
+
+def fix_scene(
+    scene: dict,
+    issues: list[dict],
+    client: Any,
+    verified_assets: list[dict] | None = None,
+) -> dict | None:
     """
     Ask the fixer to apply the listed issues to the scene.
     Returns the corrected scene dict or None if the fixer fails or returns garbage.
     """
+    mesh_note = ""
+    if verified_assets:
+        paths = "\n".join(
+            f'  - {a.get("label", a["concept"])} → "{a["path"]}"'
+            for a in verified_assets
+        )
+        mesh_note = (
+            f"\n\nAVAILABLE MESHES (these are the ONLY 3D model files on disk — "
+            f"keep them as type=\"mesh\"; never convert to primitive):\n{paths}"
+        )
     user_prompt = (
         f"SCENE JSON: {json.dumps(scene, separators=(',', ':'))}\n\n"
         f"ISSUES TO FIX: {json.dumps(issues, separators=(',', ':'))}"
+        f"{mesh_note}"
     )
     raw    = _call_flash(client, _FIXER_SYSTEM, user_prompt, max_tokens=4000)
     parsed = _extract_json(raw)
@@ -200,7 +249,11 @@ def fix_scene(scene: dict, issues: list[dict], client: Any) -> dict | None:
 
 # ─── Public entry point ───────────────────────────────────────────────────────
 
-def critique_and_fix(scene: dict, transcript: str) -> dict:
+def critique_and_fix(
+    scene: dict,
+    transcript: str,
+    verified_assets: list[dict] | None = None,
+) -> dict:
     """
     Full critic → optional fixer pass.
 
@@ -208,6 +261,7 @@ def critique_and_fix(scene: dict, transcript: str) -> dict:
     Failures are completely silent at the scene level; decisions are logged
     so you can see whether the critic is firing and what it catches.
     """
+    allowed_paths = {a["path"] for a in (verified_assets or [])}
     try:
         client = _get_gemini_client()
         if client is None:
@@ -223,8 +277,9 @@ def critique_and_fix(scene: dict, transcript: str) -> dict:
         categories = [i.get("category", "?") for i in issues]
         logger.info("Critic: %d issue(s) → running fixer  %s", len(issues), categories)
 
-        fixed = fix_scene(scene, issues, client)
+        fixed = fix_scene(scene, issues, client, verified_assets)
         if fixed and isinstance(fixed.get("objects"), list) and fixed["objects"]:
+            fixed = _restore_meshes(scene, fixed, allowed_paths)
             logger.info(
                 "Fixer: scene corrected (%d objects, was %d)",
                 len(fixed["objects"]),

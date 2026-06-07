@@ -13,7 +13,7 @@
  *  - ObjectRegistry: world-position lookup for center_ref orbit (non-parented)
  */
 
-import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { Component, createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber"
 import { Environment, OrbitControls, PerspectiveCamera, useGLTF, useTexture } from "@react-three/drei"
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js"
@@ -190,7 +190,23 @@ function PrimitiveGeom({ geom, mat }: GeomProps) {
 
 function GltfObject({ obj }: { obj: SceneObject }) {
   const { scene } = useGLTF(obj.model!)
-  const clone = useMemo(() => scene.clone(true), [scene])
+  const clone = useMemo(() => {
+    const c = scene.clone(true)
+    // Normalize every GLB to a 2-unit bounding box so JSON scale is predictable.
+    // Without this, different GLBs have wildly different internal scales (e.g. 0.002
+    // raw vertices × 100 internal node scale = 0.4 units for a basketball).
+    // After normalization: scale [1,1,1] = 1-unit half-size, scale [3,3,3] = 3-unit half-size.
+    const box = new THREE.Box3().setFromObject(c)
+    if (!box.isEmpty()) {
+      const size = new THREE.Vector3()
+      box.getSize(size)
+      const maxDim = Math.max(size.x, size.y, size.z)
+      if (maxDim > 0 && isFinite(maxDim)) {
+        c.scale.multiplyScalar(2.0 / maxDim)
+      }
+    }
+    return c
+  }, [scene])
   const params = useMemo(() => buildMaterialParams(obj.material), [obj.material])
 
   // #ffffff with no extras = "preserve the GLB's original vertex colors / textures"
@@ -236,6 +252,20 @@ function ObjObject({ obj }: { obj: SceneObject }) {
   }, [clone, params])
 
   return <primitive object={clone} />
+}
+
+// ─── Mesh error boundary — catches 404 / parse errors so one bad GLB can't crash the Canvas ──
+
+class MeshErrorBoundary extends Component<
+  { model: string; children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(err: unknown) {
+    console.warn("[ThreeScene] mesh load failed, hiding object:", (err as Error)?.message ?? err)
+  }
+  render() { return this.state.failed ? null : this.props.children }
 }
 
 // ─── Unified mesh loader ──────────────────────────────────────────────────────
@@ -460,9 +490,11 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
         <PrimitiveGeom geom={obj.geometry} mat={obj.material} />
       )}
       {obj.type === "mesh" && obj.model && (
-        <Suspense fallback={null}>
-          <MeshObject obj={obj} />
-        </Suspense>
+        <MeshErrorBoundary key={obj.model} model={obj.model}>
+          <Suspense fallback={null}>
+            <MeshObject obj={obj} />
+          </Suspense>
+        </MeshErrorBoundary>
       )}
       {/* Selection glow — cyan point light at object centre */}
       {isSelected && (
@@ -825,6 +857,13 @@ export function ThreeScene({
     [validScene.objects]
   )
 
+  // Unique signature per scene — changes whenever the object list changes so
+  // SceneFitter knows to re-fit the camera after new GLBs load.
+  const sceneSig = useMemo(
+    () => validScene.objects.map((o) => `${o.id}:${o.type}:${o.model ?? ""}`).join("|"),
+    [validScene.objects]
+  )
+
   const cam = validScene.camera
 
   useEffect(() => {
@@ -916,6 +955,7 @@ export function ThreeScene({
             <FPSMeter fpsRef={fpsRef} onFpsUpdate={onFpsUpdate} />
             <RaycastSelector triggerRef={selectTriggerRef} onSelect={handleSelect} />
             <CameraResetController resetSeq={resetSeq} cam={initialCamRef.current ?? cam} orbitRef={orbitRef} />
+            <SceneFitter sceneSig={sceneSig} orbitRef={orbitRef} />
             <DragController
               reticlePoint={reticlePoint}
               selectedId={selectedId}
@@ -978,6 +1018,86 @@ export function ThreeScene({
       />
     </div>
   )
+}
+
+// ─── Scene auto-fitter (inside Canvas) ────────────────────────────────────────
+// After each new scene loads (including async GLBs via Suspense), computes the
+// actual rendered bounding box and repositions the camera to properly frame it.
+// This corrects for GLBs whose pivot is at their feet (not center), which causes
+// Gemini's camera target to look at the floor instead of the object center.
+
+function SceneFitter({
+  sceneSig,
+  orbitRef,
+}: {
+  sceneSig: string
+  orbitRef: React.MutableRefObject<unknown>
+}) {
+  const { scene: threeScene, camera } = useThree()
+  const stateRef = useRef<{ sig: string; done: boolean; frames: number }>({
+    sig: "",
+    done: false,
+    frames: 0,
+  })
+
+  useFrame(() => {
+    const s = stateRef.current
+
+    if (s.sig !== sceneSig) {
+      s.sig    = sceneSig
+      s.done   = false
+      s.frames = 0
+    }
+    if (s.done) return
+
+    s.frames++
+    if (s.frames < 10) return  // wait for Suspense to start resolving
+
+    const box = new THREE.Box3()
+    threeScene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && child.visible) {
+        box.expandByObject(child)
+      }
+    })
+
+    // Retry each frame until meshes are actually in the scene (Suspense async)
+    if (box.isEmpty()) {
+      if (s.frames > 120) s.done = true  // give up after ~2 s
+      return
+    }
+
+    s.done = true
+
+    const center = new THREE.Vector3()
+    box.getCenter(center)
+    const size = new THREE.Vector3()
+    box.getSize(size)
+    const maxDim = Math.max(size.x, size.y, size.z)
+
+    const controls = orbitRef.current as {
+      target?: THREE.Vector3
+      update?: () => void
+      saveState?: () => void
+    } | null
+    if (!controls?.target) return
+
+    // Re-target orbit to actual scene center
+    controls.target.copy(center)
+
+    // Reposition camera maintaining its current direction but at a proper distance
+    const fov  = (camera as THREE.PerspectiveCamera).fov
+    const dist = (maxDim / 2) / Math.tan(THREE.MathUtils.degToRad(fov / 2)) * 1.8
+    const dir  = camera.position.clone().sub(center)
+    if (dir.lengthSq() < 0.001) dir.set(0, 0.5, 1)
+    dir.normalize()
+    camera.position.copy(center).addScaledVector(dir, dist)
+    camera.lookAt(center)
+    camera.updateProjectionMatrix()
+    controls.update?.()
+    controls.saveState?.()
+  })
+
+  return null
 }
 
 // ─── Camera reset controller (inside Canvas) ───────────────────────────────

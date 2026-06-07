@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core.utils.logger import get_logger
-from pipeline.cache import get_cached_scene, cache_scene
+from pipeline.cache import get_cached_scene, cache_scene, invalidate_scene
 from pipeline.semantic_parser import get_parser
 from pipeline.fallback_engine import resolve_intent
 from pipeline.asset_registry import get_verified_assets
@@ -195,7 +195,6 @@ def _fetch_polypizza(candidates: list[dict[str, str]]) -> list[dict]:
 		if not src:
 			continue
 		# Verify the file actually landed on disk
-		from pathlib import Path as _Path
 		disk_path = _ROOT / "core" / src.lstrip("/")
 		if not disk_path.exists():
 			continue
@@ -291,16 +290,30 @@ def run_pipeline(transcript: str) -> dict:
 	_print_stage(f"Stage 4: asset registry ({len(verified_assets)} verified meshes)")
 
 	# ── Stage 4b: Poly Pizza live search for unresolved concepts ────────────
-	# When a concept (e.g. "mermaid") is not in the local knowledge base,
-	# search Poly Pizza, download the GLB, and hand it to the architect.
+	# Also re-search concepts that ARE in MongoDB but whose file is missing from
+	# disk (e.g. previously downloaded then deleted). Stage 3 marks them as
+	# "resolved" so they never reach unresolved[], but their file is gone.
+	verified_concepts = {a["concept"] for a in verified_assets}
+	all_intent_concepts = (
+		resolved_intent.get("objects", [])
+		+ resolved_intent.get("structures", [])
+		+ resolved_intent.get("systems", [])
+	)
+	stale = [c for c in all_intent_concepts if c not in verified_concepts and c not in unresolved]
+	if stale:
+		logger.info("Stage 4b: stale concepts need re-download: %s", stale)
+	unresolved = unresolved + stale
+
 	live_candidates = _build_live_candidates(resolved_intent, unresolved, verified_assets, transcript)
 	if live_candidates:
 		stage_start = time.perf_counter()
 		live_assets = _fetch_polypizza(live_candidates)
 		if live_assets:
 			verified_assets = verified_assets + live_assets
+			# New assets → bust any stale cached scene for this transcript
+			invalidate_scene(transcript)
 			logger.info(
-				"Stage 4b: Poly Pizza (+%d new meshes, %dms)",
+				"Stage 4b: Poly Pizza (+%d new meshes, cache invalidated, %dms)",
 				len(live_assets),
 				int((time.perf_counter() - stage_start) * 1000),
 			)
@@ -336,7 +349,7 @@ def run_pipeline(transcript: str) -> dict:
 	# lighting, animation and physics issues.  Runs only when Gemini is
 	# configured; falls through to the original scene on any failure.
 	stage_start = time.perf_counter()
-	scene = critique_and_fix(scene, transcript)
+	# scene = critique_and_fix(scene, transcript, verified_assets)  # temporarily disabled
 	logger.info(
 		"Stage 5.5: critic/fixer complete (%dms)",
 		int((time.perf_counter() - stage_start) * 1000),

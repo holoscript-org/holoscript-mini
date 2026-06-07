@@ -10,9 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pipeline.knowledge_base.mongo_client import lookup_concept
+from pipeline.knowledge_base.mongo_client import lookup_concept, register_concept
 
 _ROOT = Path(__file__).resolve().parents[1]
+_MESHES_ROOT = _ROOT / "core" / "assets" / "meshes"
 
 
 def _get_concept(name: str) -> dict[str, Any] | None:
@@ -24,6 +25,49 @@ def _glb_exists(src: str | None) -> bool:
         return False
     rel = src.lstrip("/")
     return (_ROOT / "core" / rel).exists()
+
+
+def _find_glb_on_disk(concept: str) -> str | None:
+    """
+    Scan mesh folders for a GLB whose filename matches the concept.
+    Returns the asset_src path (e.g. /assets/meshes/abstract/mermaid.glb) or None.
+    Used as a fallback when MongoDB has no entry for a concept.
+    """
+    c = concept.lower().replace(" ", "_").replace("-", "_")
+    best: tuple[int, str] | None = None  # (score, path)
+    for folder in _MESHES_ROOT.iterdir():
+        if not folder.is_dir():
+            continue
+        for glb in folder.glob("*.glb"):
+            stem = glb.stem.lower().replace("-", "_").replace(" ", "_")
+            # Score: exact match > concept in stem > stem in concept > word overlap
+            if stem == c:
+                score = 3
+            elif c in stem or stem in c:
+                score = 2
+            else:
+                words = [w for w in c.split("_") if len(w) > 2]
+                score = 1 if words and any(w in stem for w in words) else 0
+            if score > 0:
+                rel = f"/assets/meshes/{folder.name}/{glb.name}"
+                if best is None or score > best[0]:
+                    best = (score, rel)
+    return best[1] if best else None
+
+
+def _register_disk_asset(concept: str, asset_src: str) -> None:
+    """Register an on-disk GLB in MongoDB so future lookups find it."""
+    try:
+        register_concept(
+            name=concept,
+            asset_src=asset_src,
+            category=Path(asset_src).parent.name,
+            asset_type="object",
+            description=f"On-disk asset auto-registered: {concept}",
+            synonyms=[concept.lower()],
+        )
+    except Exception:
+        pass
 
 
 def _direct_match_score(concept: str, entry: dict[str, Any]) -> float:
@@ -69,12 +113,25 @@ def get_verified_assets(intent: dict[str, Any]) -> list[dict[str, str]]:
             continue
 
         asset_src = entry.get("asset_src") or ""
+
+        # MongoDB miss or file gone — try finding a matching GLB on disk directly
         if not _glb_exists(asset_src):
-            continue
+            disk_path = _find_glb_on_disk(concept)
+            if not disk_path:
+                continue
+            asset_src = disk_path
+            _register_disk_asset(concept, asset_src)
+            entry = {"asset_src": asset_src}
 
         score = _direct_match_score(concept, entry)
         if score < 0.65:
-            continue
+            # Disk fallback: if the file exists and name contains concept words, use it
+            disk_path = _find_glb_on_disk(concept)
+            if not disk_path:
+                continue
+            asset_src = disk_path
+            _register_disk_asset(concept, asset_src)
+            score = 0.7  # confirmed disk match, accept it
 
         if asset_src in seen_paths:
             continue

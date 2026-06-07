@@ -56,11 +56,45 @@ def _is_num_01(value) -> bool:
 
 
 def _fix_animations(scene: dict) -> dict:
-	valid = {"none", "orbit", "spin"}
+	valid = {"none", "orbit", "spin", "physics"}
 	for obj in scene.get("objects", []):
 		anim = obj.get("animation")
 		if not isinstance(anim, dict) or anim.get("type") not in valid:
 			obj["animation"] = {"type": "none"}
+	return scene
+
+
+def _fix_missing_meshes(scene: dict, bad_paths: set[str] | None = None) -> dict:
+	"""Convert only the specific broken mesh objects to sphere primitives.
+	If bad_paths is None, converts all mesh objects (legacy fallback)."""
+	from pathlib import Path as _Path
+	_root = _Path(__file__).resolve().parents[1]
+
+	for i, obj in enumerate(scene.get("objects", [])):
+		if obj.get("type") != "mesh":
+			continue
+		model = obj.get("model", "")
+		if bad_paths is not None and model not in bad_paths:
+			continue
+		# If bad_paths is None (no info), check disk ourselves
+		if bad_paths is None:
+			candidate = _root / "core" / model.lstrip("/")
+			if candidate.exists():
+				continue
+		scene["objects"][i] = {
+			"id":       obj.get("id", f"fallback_{i}"),
+			"type":     "primitive",
+			"geometry": {"type": "sphere", "radius": 1.0},
+			"position": obj.get("position", [0, 0, 0]),
+			"scale":    obj.get("scale", [1, 1, 1]),
+			"material": obj.get("material") or {
+				"type": "standard", "color": "#888888",
+				"roughness": 0.6, "metalness": 0.1,
+			},
+			"animation": obj.get("animation") or {"type": "none"},
+			**({"label":  obj["label"]}  if obj.get("label")  else {}),
+			**({"parent": obj["parent"]} if obj.get("parent") else {}),
+		}
 	return scene
 
 
@@ -115,6 +149,10 @@ def repair(scene: dict, errors: list[str], max_iterations: int = 3) -> dict:
 			current = _fix_geometries(current)
 		if "transparent" in joined:
 			current = _fix_transparency(current)
+		if "model path not found" in joined:
+			import re as _re
+			bad = set(_re.findall(r"model path not found[^:]*:\s*(\S+)", joined))
+			current = _fix_missing_meshes(current, bad_paths=bad if bad else None)
 		current = _fix_required(current)
 		if current.get("objects"):
 			return current

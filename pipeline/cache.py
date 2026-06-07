@@ -103,3 +103,17 @@ def invalidate_scene(command: str) -> None:
         r.delete(_scene_key(command))
     except Exception:
         pass
+
+
+def invalidate_all_scenes() -> int:
+    """Delete all cached scene entries. Returns count deleted."""
+    r = _get_client()
+    if r is None:
+        return 0
+    try:
+        keys = r.keys("scene:*")
+        if keys:
+            return r.delete(*keys)
+        return 0
+    except Exception:
+        return 0
