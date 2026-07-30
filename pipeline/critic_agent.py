@@ -99,6 +99,9 @@ Do not rewrite the scene. Do not add objects unless the fix explicitly says to a
 Do not remove objects unless the fix explicitly says to remove one.
 CRITICAL: If an object has "type":"mesh", you MUST keep it as type="mesh" with its
 original "model" path unchanged. Never convert a mesh object to a primitive.
+CRITICAL: Preserve the top-level "summary" and every object "label"/"description" exactly
+as given. These are educational text shown to students — never drop, shorten, or rewrite
+them unless a fix instruction explicitly says the explanation is factually wrong.
 Respond with ONLY the corrected scene JSON. No markdown, no explanation.
 """
 

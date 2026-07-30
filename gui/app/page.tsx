@@ -4,18 +4,17 @@ import { useCallback, useRef, useState } from "react"
 import { POVSimulation } from "@/components/pov-simulation"
 import { CameraPanel } from "@/components/camera-panel"
 import { CommandPanel } from "@/components/command-panel"
-import { PerformanceLogs } from "@/components/performance-logs"
+import { SceneSummary } from "@/components/scene-summary"
 import { SceneConfiguration } from "@/components/scene-configuration"
 import { ThreeScene } from "@/components/ThreeScene"
 import { useWebGLSceneData } from "@/hooks/useWebGLSceneData"
 import { useGestureControl } from "@/hooks/useGestureControl"
 
 export default function HologramDashboard() {
-  // ── Scene data (JSON, POV frame, logs) ───────────────────────────────────────
+  // ── Scene data (JSON, POV frame) ─────────────────────────────────────────────
   const {
     frame,
     scene,
-    logs,
     connected,
     selectedScene,
     sceneOptions,
@@ -36,8 +35,8 @@ export default function HologramDashboard() {
   // ── Browser-side gesture transforms ──────────────────────────────────────────
   const { state: gestureState, controls: gestureControls, applyWorkerUpdate, reset, setScale } = useGestureControl({ onVSignReset })
 
-  // ── Three.js FPS (passed up from ThreeScene → shown in PerformanceLogs) ──────
-  const [threeFps, setThreeFps] = useState(0)
+  // ── Three.js FPS (reported by ThreeScene; retained for the render loop) ─────
+  const [, setThreeFps] = useState(0)
 
   // ── Pinch-to-select state ────────────────────────────────────────────────────
   const selectSeqRef = useRef(0)
@@ -295,13 +294,13 @@ export default function HologramDashboard() {
             <CommandPanel onCommandSend={handleCommandSend} />
           </div>
 
-          {/* Bottom: scene config + logs */}
+          {/* Bottom: scene config + educational summary */}
           <div className="grid min-h-0 grid-cols-2 gap-3 md:gap-4">
             <div className="min-h-0">
               <SceneConfiguration liveScene={scene} />
             </div>
             <div className="min-h-0">
-              <PerformanceLogs liveLogs={logs} guiFps={threeFps} />
+              <SceneSummary scene={scene} />
             </div>
           </div>
         </div>

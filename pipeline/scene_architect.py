@@ -131,14 +131,17 @@ Object (primitive):
       spin    → "axis":[x,y,z],   "speed": float
       physics → see PHYSICS ANIMATION section below },
     "parent": "other_id",       ← optional; child position is relative to parent
-    "label": "Human-readable"   ← optional, show for key objects only
+    "label": "Human-readable",  ← optional, show for key objects only
+    "description": "..."        ← optional; 1-2 sentence educational explanation of
+                                   this object's role in the phenomenon (see EDUCATIONAL
+                                   OUTPUT below). Provide for every labelled object.
   }
 
 Object (mesh — ONLY if path appears in AVAILABLE MESHES below):
   { "id": "...", "type": "mesh", "model": "/assets/meshes/...",
     "position": [...], "scale": [...],
     "material": { "type":"standard", "color":"#ffffff", "roughness":0.5, "metalness":0.0 },
-    "animation": {...}, "label": "..." }
+    "animation": {...}, "label": "...", "description": "..." }
   IMPORTANT: For mesh objects always use color "#ffffff" — the GLB has embedded textures;
   any other color will tint/destroy the original appearance.
   MESH SCALE: All GLB models are auto-normalized to a 2-unit bounding box at load time.
@@ -155,7 +158,47 @@ Lights:
   { "type":"directional", "intensity":0-3,  "color":"#rrggbb", "position":[x,y,z], "castShadow":true }
   { "type":"point",       "intensity":0-10, "color":"#rrggbb", "position":[x,y,z] }
 
-Camera: { "position":[x,y,z], "target":[x,y,z], "fov":40-75 }\
+Camera: { "position":[x,y,z], "target":[x,y,z], "fov":40-75 }
+
+Scene root (top level):
+  { "name": "Short Title",     ← 2-5 words, e.g. "Basketball Bouncing on Hardwood"
+    "summary": "...",          ← REQUIRED. Educational explanation (see below).
+    "objects": [...], "lights": [...], "camera": {...} }\
+"""
+
+# ---------------------------------------------------------------------------
+# Educational narration block
+# ---------------------------------------------------------------------------
+
+_EDUCATION = """\
+═══ EDUCATIONAL OUTPUT ═══
+This system is used for teaching. Every scene MUST explain the concept it depicts.
+
+Scene-level "summary" (REQUIRED, top-level string, 2-4 sentences):
+  • Name the actual principle, law, or system being shown — not what the scene looks like.
+  • Explain WHY the scene behaves the way it does, referencing the real numbers you chose
+    (g value, restitution, orbital speeds, radii, amplitude, etc.).
+  • Write for a curious student: plain language, no jargon without a short gloss.
+  • Never describe the rendering ("a red sphere sits at the centre") — describe the
+    phenomenon ("the Sun holds the planets in orbit through gravitational attraction").
+
+  GOOD: "This scene demonstrates gravity and inelastic collision. The basketball falls
+         under Earth's gravitational acceleration (g = 9.8 m/s²) and retains 70% of its
+         energy on each bounce (restitution 0.7), so each rebound is noticeably lower
+         than the last until the ball settles on the floor."
+  BAD:  "A basketball and a wooden floor are shown in the scene."
+
+Object-level "description" (1-2 sentences, on every object that has a "label"):
+  • Explain that object's specific role in the phenomenon.
+  • Where a number was chosen for a reason, say the reason.
+
+  GOOD: "Earth completes one orbit per unit of simulation time and sits 9 units from the
+         Sun — the reference distance all other orbital radii here are scaled against."
+  BAD:  "This is the Earth."
+
+Labelling rule: give a "label" + "description" to every object a student would ask about.
+For a single imported mesh (e.g. one skeleton or one organ), the whole object gets one
+label and one description — do NOT invent labels for parts you cannot address separately.\
 """
 
 # ---------------------------------------------------------------------------
@@ -242,6 +285,7 @@ _EXAMPLE_ORBITAL = """\
 EXAMPLE — "solar system" (orbital primitive scene, use as quality reference):
 {
   "name": "Solar System",
+  "summary": "This scene shows how gravity organises a planetary system. The Sun holds every planet in orbit through gravitational attraction, and because that pull weakens with distance, planets further out travel more slowly — Saturn at 21 units completes an orbit roughly three times slower than Earth at 9 units. Sizes and orbital radii here are scaled down relative to each other so the whole system stays visible at once.",
   "camera": {"position":[0,18,55], "target":[0,0,0], "fov":60},
   "lights": [
     {"type":"ambient","intensity":0.12,"color":"#ffffff"},
@@ -249,10 +293,10 @@ EXAMPLE — "solar system" (orbital primitive scene, use as quality reference):
     {"type":"directional","intensity":0.5,"color":"#ffffff","position":[50,30,20],"castShadow":true}
   ],
   "objects": [
-    {"id":"sun","type":"primitive","geometry":{"type":"sphere","radius":2.5},"position":[0,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#ffdd33","roughness":0.4,"metalness":0.0,"emissive":"#ff8800","emissiveIntensity":1.0},"label":"Sun","animation":{"type":"none"}},
-    {"id":"earth","type":"primitive","geometry":{"type":"sphere","radius":0.5},"position":[9,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#1a5acc","roughness":0.7,"metalness":0.05},"label":"Earth","animation":{"type":"orbit","center":[0,0,0],"speed":1.0,"phase":0}},
+    {"id":"sun","type":"primitive","geometry":{"type":"sphere","radius":2.5},"position":[0,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#ffdd33","roughness":0.4,"metalness":0.0,"emissive":"#ff8800","emissiveIntensity":1.0},"label":"Sun","description":"The star at the centre of the system. It holds 99.8% of the system's mass, and that mass is the source of the gravitational pull keeping every planet in orbit.","animation":{"type":"none"}},
+    {"id":"earth","type":"primitive","geometry":{"type":"sphere","radius":0.5},"position":[9,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#1a5acc","roughness":0.7,"metalness":0.05},"label":"Earth","description":"Orbits at 9 units from the Sun — the reference distance every other orbital radius here is scaled against. Its speed of 1.0 sets the baseline all other orbital speeds are measured relative to.","animation":{"type":"orbit","center":[0,0,0],"speed":1.0,"phase":0}},
     {"id":"moon","type":"primitive","geometry":{"type":"sphere","radius":0.14},"position":[0.65,0,0],"scale":[1,1,1],"parent":"earth","material":{"type":"standard","color":"#cccccc","roughness":0.95,"metalness":0.0},"animation":{"type":"orbit","center":[0,0,0],"speed":13.0}},
-    {"id":"saturn","type":"primitive","geometry":{"type":"sphere","radius":1.0},"position":[21,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#ddcc88","roughness":0.5,"metalness":0.05},"label":"Saturn","animation":{"type":"orbit","center":[0,0,0],"speed":0.323,"phase":1.2}},
+    {"id":"saturn","type":"primitive","geometry":{"type":"sphere","radius":1.0},"position":[21,0,0],"scale":[1,1,1],"material":{"type":"standard","color":"#ddcc88","roughness":0.5,"metalness":0.05},"label":"Saturn","description":"At 21 units out, Saturn orbits at 0.323 — about a third of Earth's speed. This slowdown with distance is Kepler's third law in action: the further a planet sits from the Sun, the weaker the pull and the longer its year.","animation":{"type":"orbit","center":[0,0,0],"speed":0.323,"phase":1.2}},
     {"id":"saturn_ring","type":"primitive","geometry":{"type":"ring","innerRadius":1.35,"outerRadius":2.35,"thetaSegments":128},"position":[0,0,0],"rotation":[16,0,8],"scale":[1,1,1],"parent":"saturn","material":{"type":"standard","color":"#ccbb77","roughness":0.8,"metalness":0.0,"opacity":0.6,"transparent":true},"animation":{"type":"none"}}
   ]
 }
@@ -261,7 +305,12 @@ END EXAMPLE\
 
 _EXAMPLE_ANATOMICAL = """\
 EXAMPLE — "human heart" (anatomical primitive scene, compound shapes):
-Key objects (abbreviated — full scene uses ~25 primitives):
+  summary: "This model shows the four-chambered structure of the human heart and how blood
+            is routed through it. The left ventricle is built largest because it pumps
+            oxygenated blood to the entire body and needs the thickest muscle wall, while
+            the right ventricle only pushes blood as far as the lungs. The translucent outer
+            layer is the pericardium, the protective sac enclosing the whole organ."
+Key objects (abbreviated — full scene uses ~25 primitives, each labelled one carries a description):
   left_ventricle_core: sphere r=1.55, scale=[0.95,1.34,1.06], color=#8f1a1a, pos=[-0.62,-1.35,0.12]
   right_ventricle_core: sphere r=1.24, color=#6f1014
   aorta_root: cylinder from=[-0.35,1.02,0.08] to=[-0.35,2.22,0.1] r=0.38, color=#c23434
@@ -346,6 +395,8 @@ Your output is rendered directly in Three.js — correctness and visual quality 
 
 {_SCHEMA}
 
+{_EDUCATION}
+
 {_PHYSICS}
 
 {_EXAMPLE_ORBITAL}
@@ -354,6 +405,8 @@ Your output is rendered directly in Three.js — correctness and visual quality 
 
 OUTPUT RULES:
 - Output ONLY the raw JSON object. No markdown fences, no explanation.
+- The scene MUST include a top-level "summary" string (2-4 sentences, see EDUCATIONAL OUTPUT).
+- Every object carrying a "label" MUST also carry a "description".
 - Every object needs a unique "id" in snake_case.
 - Every object needs "position", "material", "animation".
 - material.color must be a 6-digit hex "#rrggbb".
@@ -589,6 +642,7 @@ def _sanitize_mesh_paths(scene: dict[str, Any], allowed: set[str]) -> dict[str, 
                     },
                     "animation": obj.get("animation") or {"type": "none"},
                     **({"label":  obj["label"]}  if obj.get("label")  else {}),
+                    **({"description": obj["description"]} if obj.get("description") else {}),
                     **({"parent": obj["parent"]} if obj.get("parent") else {}),
                 }
         sanitized.append(obj)

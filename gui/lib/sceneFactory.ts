@@ -142,6 +142,8 @@ export interface SceneObject {
   scale?: [number, number, number]
   material: MaterialDef
   label?: string
+  /** 1-2 sentence educational explanation of this object's role in the phenomenon. */
+  description?: string
   animation?: AnimationDef
 }
 
@@ -169,6 +171,8 @@ export interface CameraDef {
 
 export interface SceneDef {
   name?: string
+  /** 2-4 sentence educational explanation of the phenomenon the scene depicts. */
+  summary?: string
   objects: SceneObject[]
   lights: LightDef[]
   camera: CameraDef
@@ -471,6 +475,7 @@ function validateObject(raw: unknown, index: number): { obj: SceneObject | null;
   if (r.rotation !== undefined && !isVec3(r.rotation)) errors.push(`${prefix}: rotation must be [rx,ry,rz]`)
   if (r.scale    !== undefined && !isVec3(r.scale))    errors.push(`${prefix}: scale must be [sx,sy,sz]`)
   if (r.label    !== undefined && typeof r.label !== "string") errors.push(`${prefix}: label must be a string`)
+  if (r.description !== undefined && typeof r.description !== "string") errors.push(`${prefix}: description must be a string`)
 
   // animation
   const { anim, errors: ae } = validateAnimation(r.animation, prefix)
@@ -492,7 +497,8 @@ function validateObject(raw: unknown, index: number): { obj: SceneObject | null;
       rotation:  isVec3(r.rotation) ? r.rotation : undefined,
       scale:     isVec3(r.scale)    ? r.scale    : undefined,
       material:  mat,
-      label:     typeof r.label === "string" ? r.label : undefined,
+      label:       typeof r.label === "string" ? r.label : undefined,
+      description: typeof r.description === "string" ? r.description : undefined,
       animation: anim ?? { type: "none" },
     },
     errors,
@@ -618,6 +624,7 @@ export function validateScene(raw: unknown): ValidationResult {
   return {
     scene: {
       name:    typeof r.name === "string" ? r.name : undefined,
+      summary: typeof r.summary === "string" ? r.summary : undefined,
       objects: validObjects,
       lights,
       camera,

@@ -1,7 +1,7 @@
 """
 Python port of gui/lib/sceneFactory.ts -> validateScene().
 
-MIRROR STATUS: synchronized with sceneFactory.ts as of 2026-06-06.
+MIRROR STATUS: synchronized with sceneFactory.ts as of 2026-07-30.
 If sceneFactory.ts is modified, update this file and the date above.
 
 Corresponding TypeScript lines:
@@ -352,6 +352,8 @@ def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
 		errors.append(f"{prefix}: scale must be [sx,sy,sz]")
 	if raw.get("label") is not None and not isinstance(raw["label"], str):
 		errors.append(f"{prefix}: label must be a string")
+	if raw.get("description") is not None and not isinstance(raw["description"], str):
+		errors.append(f"{prefix}: description must be a string")
 
 	anim, ae = _validate_animation(raw.get("animation"), prefix, position=raw.get("position"))
 	errors.extend(ae)
@@ -380,6 +382,7 @@ def _validate_object(raw: Any, index: int) -> tuple[dict | None, list[str]]:
 		"rotation": raw["rotation"] if _is_vec3(raw.get("rotation")) else None,
 		"scale": raw["scale"] if _is_vec3(raw.get("scale")) else None,
 		"label": raw["label"] if isinstance(raw.get("label"), str) else None,
+		"description": raw["description"] if isinstance(raw.get("description"), str) else None,
 	}
 	obj.update({k: v for k, v in optional.items() if v is not None})
 	return obj, errors
@@ -494,6 +497,7 @@ def validate_scene(raw: Any) -> dict:
 	return {
 		"scene": {
 			"name": raw.get("name") if isinstance(raw.get("name"), str) else None,
+			"summary": raw.get("summary") if isinstance(raw.get("summary"), str) else None,
 			"objects": valid_objects,
 			"lights": lights,
 			"camera": camera,
