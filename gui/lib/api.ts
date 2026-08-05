@@ -56,3 +56,29 @@ export async function pushScene(scene: Record<string, unknown>): Promise<boolean
     return false
   }
 }
+
+// ─── Pipeline command endpoints ──────────────────────────────────────────────
+// Wrappers for the legacy fetch+poll trigger (backend/api_server.py's
+// POST /command + GET /command/status, left unchanged for back-compat).
+// usePipelineStream.ts uses connectPipelineWebSocket() instead — these two
+// exist so no caller has to hand-roll the BASE_URL string directly.
+
+export async function postCommand(command: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${BASE_URL}/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command }),
+  })
+  return (await res.json()) as { status: string; message: string }
+}
+
+export async function fetchCommandStatus(): Promise<{ running: boolean; state: string; message: string }> {
+  return safeFetch(`${BASE_URL}/command/status`, { running: false, state: "idle", message: "" })
+}
+
+// ─── Pipeline WebSocket ──────────────────────────────────────────────────────
+
+export function connectPipelineWebSocket(): WebSocket {
+  const wsUrl = BASE_URL.replace(/^http/, "ws") + "/ws/pipeline"
+  return new WebSocket(wsUrl)
+}

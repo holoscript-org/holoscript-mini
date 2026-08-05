@@ -5,6 +5,31 @@ Usage:
 	python -m pipeline.pipeline_runner "create a city on mars"
 	python -m pipeline.pipeline_runner          # uses voice recorder
 	python -m pipeline.preload_semantic_model   # preloads the semantic model
+
+Stage order (see pipeline/events.py for the progress-event contract every
+stage below can optionally emit via the `on_event` callback):
+
+	1.  Receive transcript
+	2.  Prompt Optimizer (LLM)                       pipeline/prompt_optimizer.py
+	3.  Structured Intent Extraction (LLM)           pipeline/intent_extractor.py
+	4.  Semantic parse (unchanged, runs on the optimized prompt)
+	5.  Resolve intent (unchanged)
+	6.  Asset registry verify (unchanged)
+	6b. Live asset search / Poly Pizza (unchanged)
+	7.  Scene Architect — 3 LLM sub-stages           pipeline/scene_architect.py
+	    7a. Layout & Composition
+	    7b. Per-Object Detail
+	    7c. Lighting / Camera / Polish
+	    7d. legacy fallback path (unchanged, only if 7a fails)
+	8.  Critic <-> Fixer loop, up to 3 iterations    pipeline/critic_agent.py
+	    (object-level technical defects: lighting, physics, spatial overlaps)
+	8.5 Intent Verifier <-> Realign loop, up to 2 rounds  pipeline/intent_verifier.py
+	    (holistic: does the scene as a whole satisfy the ORIGINAL request?
+	    if not, regenerates the specific architect pass responsible instead
+	    of falling back to a generic/primitive scene)
+	9.  Validate (unchanged)
+	10. Repair (unchanged)
+	11. Cache write / DEMO_FALLBACK / strip-none / save (unchanged)
 """
 from __future__ import annotations
 
@@ -25,10 +50,14 @@ from pipeline.cache import get_cached_scene, cache_scene, invalidate_scene
 from pipeline.semantic_parser import get_parser
 from pipeline.fallback_engine import resolve_intent
 from pipeline.asset_registry import get_verified_assets
+from pipeline.prompt_optimizer import optimize as optimize_prompt
+from pipeline.intent_extractor import extract as extract_intent_ir
 from pipeline.scene_architect import generate_scene as architect_generate
-from pipeline.critic_agent import critique_and_fix
+from pipeline.critic_agent import critique_and_fix_loop
+from pipeline.intent_verifier import verify_and_realign
 from pipeline.scene_validator import validate_scene
 from pipeline.repair_loop import DEMO_FALLBACK, repair
+from pipeline.events import OnEvent, make_emitter, new_run_id, COMPLETED, OUTPUT, STARTED
 
 # Legacy path (used as fallback if architect fails)
 from pipeline.retrieval import retrieve
@@ -224,39 +253,90 @@ def _is_refinement(transcript: str) -> bool:
 	return any(t.startswith(p) for p in _REFINE_PREFIXES)
 
 
-def run_pipeline(transcript: str) -> dict:
+def run_pipeline(
+	transcript: str,
+	on_event: OnEvent | None = None,
+	run_id: str | None = None,
+) -> dict:
+	"""
+	Run the full 11-stage pipeline. `on_event`/`run_id` are optional and
+	fully backward compatible — every existing call site (run_with_voice(),
+	the CLI entry point, and backend/api_server.py's POST /command handler)
+	keeps working unchanged, with no event emission, when on_event is None.
+	"""
+	run_id = run_id or new_run_id()
+	emit = make_emitter(run_id, on_event)
 	t0 = time.perf_counter()
 	_ensure_parser_ready()
 
-	# ── Redis scene cache — skip for refinement commands ─────────────────────
+	# ── Redis scene cache — skip for refinement commands. Keyed on the ──────
+	# original transcript (not the Stage 2 optimizer's output), since the
+	# optimizer can vary slightly run-to-run at temperature > 0, which would
+	# fragment the cache if keyed on its output instead.
 	if not _is_refinement(transcript):
 		cached = get_cached_scene(transcript)
 		if cached:
 			logger.info("Redis cache HIT — serving cached scene")
 			_print_stage("Cache HIT: serving from Redis")
+			emit("cache", OUTPUT, "Cache", payload={"hit": True})
 			OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-			OUTPUT_PATH.write_text(__import__("json").dumps(cached, indent=2), encoding="utf-8")
+			OUTPUT_PATH.write_text(json.dumps(cached, indent=2), encoding="utf-8")
 			return cached
 
 	# ── Stage 1: receive transcript ──────────────────────────────────────────
 	logger.info("Stage 1: transcript received (len=%d)", len(transcript or ""))
 	_print_stage("Stage 1: transcript received")
+	emit("receive_transcript", STARTED, "Receive Transcript")
+	emit("receive_transcript", OUTPUT, "Receive Transcript", payload={"transcript": transcript})
+	emit("receive_transcript", COMPLETED, "Receive Transcript", elapsed_ms=0)
 
-	# ── Stage 2: semantic parse ──────────────────────────────────────────────
+	# ── Stage 2: prompt optimizer ────────────────────────────────────────────
 	stage_start = time.perf_counter()
-	raw_intent = get_parser().parse_intent(transcript)
+	optimizer_result = optimize_prompt(transcript, run_id=run_id, on_event=on_event)
+	optimized_prompt = optimizer_result["optimized_prompt"]
 	logger.info(
-		"Stage 2: semantic parse (objects=%d, structures=%d, systems=%d, effects=%d, %dms)",
+		"Stage 2: prompt optimizer (%d clarification(s), %dms)",
+		len(optimizer_result.get("clarifications_made", [])),
+		int((time.perf_counter() - stage_start) * 1000),
+	)
+	_print_stage("Stage 2: prompt optimizer complete")
+
+	# ── Stage 3: structured intent extraction ────────────────────────────────
+	stage_start = time.perf_counter()
+	intent_ir = extract_intent_ir(optimized_prompt, run_id=run_id, on_event=on_event)
+	logger.info(
+		"Stage 3: intent extraction (scene_type=%s, %d object(s), %dms)",
+		intent_ir.get("scene_type"),
+		len(intent_ir.get("objects", [])),
+		int((time.perf_counter() - stage_start) * 1000),
+	)
+	_print_stage("Stage 3: intent extraction complete")
+
+	# ── Stage 4: semantic parse (runs on the optimized prompt) ──────────────
+	stage_start = time.perf_counter()
+	emit("semantic_parse", STARTED, "Semantic Parse")
+	raw_intent = get_parser().parse_intent(optimized_prompt)
+	logger.info(
+		"Stage 4: semantic parse (objects=%d, structures=%d, systems=%d, effects=%d, %dms)",
 		len(raw_intent.get("objects", [])),
 		len(raw_intent.get("structures", [])),
 		len(raw_intent.get("systems", [])),
 		len(raw_intent.get("effects", [])),
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage("Stage 2: semantic parse complete")
+	_print_stage("Stage 4: semantic parse complete")
+	emit("semantic_parse", OUTPUT, "Semantic Parse", payload={
+		"objects": raw_intent.get("objects", []),
+		"structures": raw_intent.get("structures", []),
+		"systems": raw_intent.get("systems", []),
+		"effects": raw_intent.get("effects", []),
+	})
+	emit("semantic_parse", COMPLETED, "Semantic Parse",
+		 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 3: resolve intent ──────────────────────────────────────────────
+	# ── Stage 5: resolve intent ──────────────────────────────────────────────
 	stage_start = time.perf_counter()
+	emit("resolve_intent", STARTED, "Resolve Intent")
 	resolved_intent, unresolved = resolve_intent(raw_intent)
 	extra_unresolved = raw_intent.get("_unresolved_tokens", []) if isinstance(raw_intent, dict) else []
 	resolved_terms = {
@@ -272,26 +352,35 @@ def run_pipeline(transcript: str) -> dict:
 		if token not in unresolved:
 			unresolved.append(token)
 	logger.info(
-		"Stage 3: resolve (resolved=%d, unresolved=%d, %dms)",
+		"Stage 5: resolve (resolved=%d, unresolved=%d, %dms)",
 		sum(len(resolved_intent.get(k, [])) for k in ["objects", "structures", "systems", "effects"]),
 		len(unresolved),
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage("Stage 3: resolve complete")
+	_print_stage("Stage 5: resolve complete")
+	emit("resolve_intent", OUTPUT, "Resolve Intent", payload={
+		"resolved": resolved_intent, "unresolved": unresolved,
+	})
+	emit("resolve_intent", COMPLETED, "Resolve Intent",
+		 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 4: build disk-verified asset menu for Groq ────────────────────
+	# ── Stage 6: build disk-verified asset menu ──────────────────────────────
 	stage_start = time.perf_counter()
+	emit("asset_registry", STARTED, "Asset Registry")
 	verified_assets = get_verified_assets(resolved_intent)
 	logger.info(
-		"Stage 4: asset registry (%d verified GLBs, %dms)",
+		"Stage 6: asset registry (%d verified GLBs, %dms)",
 		len(verified_assets),
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage(f"Stage 4: asset registry ({len(verified_assets)} verified meshes)")
+	_print_stage(f"Stage 6: asset registry ({len(verified_assets)} verified meshes)")
+	emit("asset_registry", OUTPUT, "Asset Registry", payload={"verified_assets": verified_assets})
+	emit("asset_registry", COMPLETED, "Asset Registry",
+		 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 4b: Poly Pizza live search for unresolved concepts ────────────
+	# ── Stage 6b: Poly Pizza live search for unresolved concepts ────────────
 	# Also re-search concepts that ARE in MongoDB but whose file is missing from
-	# disk (e.g. previously downloaded then deleted). Stage 3 marks them as
+	# disk (e.g. previously downloaded then deleted). Stage 5 marks them as
 	# "resolved" so they never reach unresolved[], but their file is gone.
 	verified_concepts = {a["concept"] for a in verified_assets}
 	all_intent_concepts = (
@@ -301,84 +390,138 @@ def run_pipeline(transcript: str) -> dict:
 	)
 	stale = [c for c in all_intent_concepts if c not in verified_concepts and c not in unresolved]
 	if stale:
-		logger.info("Stage 4b: stale concepts need re-download: %s", stale)
+		logger.info("Stage 6b: stale concepts need re-download: %s", stale)
 	unresolved = unresolved + stale
 
-	live_candidates = _build_live_candidates(resolved_intent, unresolved, verified_assets, transcript)
+	live_candidates = _build_live_candidates(resolved_intent, unresolved, verified_assets, optimized_prompt)
 	if live_candidates:
 		stage_start = time.perf_counter()
+		emit("live_search", STARTED, "Live Asset Search")
 		live_assets = _fetch_polypizza(live_candidates)
 		if live_assets:
 			verified_assets = verified_assets + live_assets
 			# New assets → bust any stale cached scene for this transcript
 			invalidate_scene(transcript)
 			logger.info(
-				"Stage 4b: Poly Pizza (+%d new meshes, cache invalidated, %dms)",
+				"Stage 6b: Poly Pizza (+%d new meshes, cache invalidated, %dms)",
 				len(live_assets),
 				int((time.perf_counter() - stage_start) * 1000),
 			)
-			_print_stage(f"Stage 4b: Poly Pizza ({len(live_assets)} downloaded)")
+			_print_stage(f"Stage 6b: Poly Pizza ({len(live_assets)} downloaded)")
 		else:
-			logger.info("Stage 4b: Poly Pizza — no new meshes found")
+			logger.info("Stage 6b: Poly Pizza — no new meshes found")
+		emit("live_search", OUTPUT, "Live Asset Search", payload={
+			"candidates": live_candidates,
+			"downloaded": live_assets,
+		})
+		emit("live_search", COMPLETED, "Live Asset Search",
+			 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 5: Groq scene architect ────────────────────────────────────────
+	# ── Stage 7: scene architect (3 LLM sub-stages: layout/detail/finish) ───
 	stage_start = time.perf_counter()
-	scene = architect_generate(transcript, resolved_intent, verified_assets)
+	scene = architect_generate(
+		optimized_prompt, resolved_intent, verified_assets,
+		intent_ir=intent_ir, run_id=run_id, on_event=on_event,
+	)
 	architect_ok = scene is not None and bool(scene.get("objects"))
 	logger.info(
-		"Stage 5: architect (%s, objects=%d, %dms)",
+		"Stage 7: architect (%s, objects=%d, %dms)",
 		"ok" if architect_ok else "failed — using legacy path",
 		len(scene.get("objects", [])) if scene else 0,
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage(f"Stage 5: architect {'complete' if architect_ok else 'failed — falling back'}")
+	_print_stage(f"Stage 7: architect {'complete' if architect_ok else 'failed — falling back'}")
 
-	# ── Stage 5b: legacy fallback if architect failed ────────────────────────
+	# ── Stage 7d: legacy fallback if architect failed ────────────────────────
 	if not architect_ok:
 		stage_start = time.perf_counter()
-		scene = _legacy_build(transcript, resolved_intent, unresolved)
+		emit("legacy_fallback", STARTED, "Legacy Fallback Build")
+		scene = _legacy_build(optimized_prompt, resolved_intent, unresolved)
 		logger.info(
-			"Stage 5b: legacy build (objects=%d, %dms)",
+			"Stage 7d: legacy build (objects=%d, %dms)",
 			len(scene.get("objects", [])),
 			int((time.perf_counter() - stage_start) * 1000),
 		)
-		_print_stage("Stage 5b: legacy build complete")
+		_print_stage("Stage 7d: legacy build complete")
+		emit("legacy_fallback", OUTPUT, "Legacy Fallback Build", payload={
+			"object_count": len(scene.get("objects", [])),
+		})
+		emit("legacy_fallback", COMPLETED, "Legacy Fallback Build",
+			 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 5.5: critic + fixer pass (silent fail, Gemini Flash) ───────────
+	# ── Stage 8: critic <-> fixer iterative loop (up to 3 iterations) ───────
 	# Reviews the scene against the transcript for intent, spatial, scale,
-	# lighting, animation and physics issues.  Runs only when Gemini is
-	# configured; falls through to the original scene on any failure.
+	# lighting, animation and physics issues, and fixes what it finds,
+	# looping until clean or the iteration cap is hit. This is OBJECT-LEVEL
+	# technical review — see Stage 8.5 for the holistic intent check.
 	stage_start = time.perf_counter()
-	# scene = critique_and_fix(scene, transcript, verified_assets)  # temporarily disabled
+	scene = critique_and_fix_loop(
+		scene, optimized_prompt, verified_assets,
+		max_iterations=3, run_id=run_id, on_event=on_event,
+	)
 	logger.info(
-		"Stage 5.5: critic/fixer complete (%dms)",
+		"Stage 8: critic/fixer loop complete (%dms)",
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage("Stage 5.5: critic/fixer complete")
+	_print_stage("Stage 8: critic/fixer loop complete")
 
-	# ── Stage 6: validate ────────────────────────────────────────────────────
+	# ── Stage 8.5: intent verifier <-> realign loop (up to 2 rounds) ────────
+	# Compares the FINISHED scene holistically against the original request
+	# and the Scene Intent IR — not a checklist of technical defects, but
+	# "does this actually give the user what they asked for". If not, it
+	# identifies which architect pass (layout/detail/finish) is responsible
+	# and regenerates ONLY that pass with corrective feedback, modifying and
+	# realigning the existing scene rather than falling back to a generic
+	# placeholder. Fails open — any error keeps the scene unchanged.
 	stage_start = time.perf_counter()
+	scene = verify_and_realign(
+		scene, optimized_prompt, intent_ir, verified_assets,
+		max_rounds=2, run_id=run_id, on_event=on_event,
+	)
+	logger.info(
+		"Stage 8.5: intent verifier/realign loop complete (%dms)",
+		int((time.perf_counter() - stage_start) * 1000),
+	)
+	_print_stage("Stage 8.5: intent verifier/realign loop complete")
+
+	# ── Stage 9: validate ────────────────────────────────────────────────────
+	stage_start = time.perf_counter()
+	emit("validate", STARTED, "Validate")
 	vr = validate_scene(scene)
 	logger.info(
-		"Stage 6: validation (fatal=%s, errors=%d, %dms)",
+		"Stage 9: validation (fatal=%s, errors=%d, %dms)",
 		bool(vr.get("fatal")),
 		len(vr.get("errors", [])),
 		int((time.perf_counter() - stage_start) * 1000),
 	)
-	_print_stage("Stage 6: validation complete")
+	_print_stage("Stage 9: validation complete")
+	emit("validate", OUTPUT, "Validate", payload={
+		"fatal": vr.get("fatal"), "errors": vr.get("errors", []),
+	})
+	emit("validate", COMPLETED, "Validate",
+		 elapsed_ms=int((time.perf_counter() - stage_start) * 1000))
 
-	# ── Stage 7: repair if needed ────────────────────────────────────────────
+	# ── Stage 10: repair if needed ───────────────────────────────────────────
+	repair_actions: list[str] = []
 	if vr.get("fatal"):
-		logger.warning("Stage 7: repair (fatal) -> running repair loop")
-		_print_stage("Stage 7: repair (fatal)")
+		logger.warning("Stage 10: repair (fatal) -> running repair loop")
+		_print_stage("Stage 10: repair (fatal)")
+		emit("repair", STARTED, "Repair")
 		scene = repair(scene, [vr["fatal"]])
 		vr = validate_scene(scene)
+		repair_actions.append(f"Fixed fatal error: {vr.get('fatal') or 'resolved'}")
 
 	if vr.get("errors"):
-		logger.warning("Stage 7: repair (errors=%d)", len(vr.get("errors", [])))
-		_print_stage(f"Stage 7: repair ({len(vr['errors'])} errors)")
+		logger.warning("Stage 10: repair (errors=%d)", len(vr.get("errors", [])))
+		_print_stage(f"Stage 10: repair ({len(vr['errors'])} errors)")
+		emit("repair", STARTED, "Repair")
 		scene = repair(scene, vr["errors"])
+		repair_actions.extend(vr["errors"])
 		vr = validate_scene(scene)
+
+	if repair_actions:
+		emit("repair", OUTPUT, "Repair", payload={"actions": repair_actions})
+		emit("repair", COMPLETED, "Repair")
 
 	final = vr.get("scene") or scene
 
@@ -387,26 +530,25 @@ def run_pipeline(transcript: str) -> dict:
 		cache_scene(transcript, final)
 		logger.info("Redis: scene cached for transcript (len=%d)", len(transcript))
 
-	# ── Stage 8: fallback if still empty ─────────────────────────────────────
+	# ── Stage 11: fallback if still empty, strip nulls, save ────────────────
 	if not final.get("objects"):
-		logger.warning("Stage 8: fallback -> DEMO_FALLBACK")
+		logger.warning("Stage 11: fallback -> DEMO_FALLBACK")
 		final = DEMO_FALLBACK
 
 	final = _strip_none(final)
 
-	# ── Stage 9: save ────────────────────────────────────────────────────────
 	OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 	OUTPUT_PATH.write_text(json.dumps(final, indent=2), encoding="utf-8")
 
 	elapsed = (time.perf_counter() - t0) * 1000
-	logger.info("Stage 9: saved -> %s", OUTPUT_PATH)
+	logger.info("Stage 11: saved -> %s", OUTPUT_PATH)
 	logger.info(
 		"Complete: scene='%s' objects=%d total=%dms",
 		final.get("name"),
 		len(final.get("objects", [])),
 		int(elapsed),
 	)
-	_print_stage(f"Stage 9: saved -> {OUTPUT_PATH}")
+	_print_stage(f"Stage 11: saved -> {OUTPUT_PATH}")
 	return final
 
 

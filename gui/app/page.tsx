@@ -1,14 +1,16 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { POVSimulation } from "@/components/pov-simulation"
 import { CameraPanel } from "@/components/camera-panel"
 import { CommandPanel } from "@/components/command-panel"
 import { SceneSummary } from "@/components/scene-summary"
 import { SceneConfiguration } from "@/components/scene-configuration"
 import { ThreeScene } from "@/components/ThreeScene"
+import { PipelineOverlay } from "@/components/pipeline-overlay/PipelineOverlay"
 import { useWebGLSceneData } from "@/hooks/useWebGLSceneData"
 import { useGestureControl } from "@/hooks/useGestureControl"
+import { usePipelineStream } from "@/hooks/usePipelineStream"
 
 export default function HologramDashboard() {
   // ── Scene data (JSON, POV frame) ─────────────────────────────────────────────
@@ -121,6 +123,10 @@ export default function HologramDashboard() {
   )
 
   // ── Command panel integration — sends command to Member 1 pipeline ───────────
+  // Live progress streams over WebSocket (see hooks/usePipelineStream.ts and
+  // the PipelineOverlay rendered below) instead of the old fetch+poll loop.
+  const pipeline = usePipelineStream()
+
   const handleCommandSend = useCallback(
     async (command: string) => {
       const cmd = command.toLowerCase()
@@ -128,43 +134,23 @@ export default function HologramDashboard() {
         handleReset()
         return
       }
-
-      try {
-        const res = await fetch("http://localhost:8000/command", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ command }),
-        })
-        if (!res.ok) {
-          console.error("Pipeline command rejected:", res.status)
-          return
-        }
-
-        // Poll /command/status until the pipeline finishes, then refresh scene.
-        // Gemini 2.5 Pro can take 60–90 s for complex scenes — poll up to 3 min.
-        const timer = setInterval(async () => {
-          try {
-            const statusRes = await fetch("http://localhost:8000/command/status", { cache: "no-store" })
-            const status = await statusRes.json() as { running: boolean; state: string }
-            if (!status.running) {
-              clearInterval(timer)
-              if (status.state === "done") {
-                await refreshFromBackend()
-              }
-            }
-          } catch {
-            clearInterval(timer)
-          }
-        }, 1500)
-
-        // Safety: stop polling after 3 min (Gemini architect can take 60–90 s)
-        setTimeout(() => clearInterval(timer), 180_000)
-      } catch (err) {
-        console.error("Failed to send command to backend:", err)
-      }
+      pipeline.start(command)
     },
-    [handleReset, refreshFromBackend]
+    [handleReset, pipeline]
   )
+
+  // On successful completion, refresh the dashboard's scene state. We still
+  // call refreshFromBackend() (rather than only trusting the scene inlined in
+  // the WS run_finished message) since it may sync more dashboard state than
+  // just the raw scene JSON — the inlined scene is treated as a fast-path
+  // preview for the overlay's own success view, not a full replacement.
+  const pipelineDoneRunIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (pipeline.state.status !== "done" || !pipeline.state.runId) return
+    if (pipelineDoneRunIdRef.current === pipeline.state.runId) return
+    pipelineDoneRunIdRef.current = pipeline.state.runId
+    void refreshFromBackend()
+  }, [pipeline.state.status, pipeline.state.runId, refreshFromBackend])
 
   return (
     <div className="h-screen overflow-hidden bg-background p-3 md:p-4">
@@ -331,6 +317,10 @@ export default function HologramDashboard() {
           )`,
         }}
       />
+
+      {/* Live pipeline progress overlay — appears on command submit, shows
+          every generation stage, dismisses into the hydrated scene above */}
+      <PipelineOverlay state={pipeline.state} onDismiss={pipeline.dismiss} />
     </div>
   )
 }

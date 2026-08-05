@@ -2,24 +2,36 @@
 Critic + Fixer agents for scene quality control.
 
 Architecture:
-  critique_and_fix(scene, transcript) → scene
-      └─ critique_scene(...)  → issues list      (Gemini Flash, ~800 tokens)
-      └─ fix_scene(...)       → corrected scene   (Gemini Flash, ~3500 tokens)
+  critique_and_fix_loop(scene, transcript) → scene   (Stage 8, up to 3 iterations)
+      loop:
+        └─ critique_scene(...)  → issues list      (Gemini Flash, ~800 tokens)
+        └─ fix_scene(...)       → corrected scene   (Gemini Flash, ~3500 tokens)
+      breaks early as soon as critique_scene() returns no issues.
 
-Both agents use Gemini Flash via GEMINI_API_KEY (direct API, not Vertex AI).
-The entire pipeline fails silently: if anything goes wrong, the original scene
-passes through unchanged.  All decisions are logged for observability.
+Both agents use Gemini Flash via Vertex AI (ADC — no API key required),
+reached through the shared client in llm/gemini_client.py, with no fallback
+to Groq for this stage (the critic is a quality-refinement pass, not a
+required one — if Gemini/Vertex is unavailable, critique_scene() simply
+returns no issues and the scene passes through unchanged).
+
+The entire pipeline fails silently: if anything goes wrong, the original
+scene passes through unchanged. All decisions are logged for observability.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import time
 from typing import Any
 
 from core.utils.logger import get_logger
+from llm.gemini_client import call_gemini
+from pipeline.events import OnEvent, make_emitter, COMPLETED, OUTPUT, STARTED
 
 logger = get_logger("critic_agent")
+
+_MODEL_CRITIC = "gemini-2.5-flash"
 
 # ─── Critic system prompt ─────────────────────────────────────────────────────
 
@@ -106,44 +118,20 @@ Respond with ONLY the corrected scene JSON. No markdown, no explanation.
 """
 
 
-# ─── Gemini client ────────────────────────────────────────────────────────────
+# ─── Gemini call ──────────────────────────────────────────────────────────────
 
-def _get_gemini_client() -> Any | None:
-    """Return a Vertex AI genai client using ADC (no API key required)."""
-    try:
-        from google import genai
-        from google.genai.types import HttpOptions
-        return genai.Client(
-            vertexai=True,
-            project=os.getenv("GCP_PROJECT", "reportevaluator"),
-            location=os.getenv("GCP_LOCATION", "us-central1"),
-            http_options=HttpOptions(api_version="v1"),
-        )
-    except Exception as exc:
-        logger.debug("google-genai Vertex AI client failed: %s", exc)
-        return None
-
-
-def _call_flash(client: Any, system_prompt: str, user_prompt: str, max_tokens: int) -> str | None:
-    """Single Gemini Flash call via Vertex AI. Returns text or None on any failure."""
-    try:
-        from google.genai import types as genai_types
-        model = os.getenv("GEMINI_CRITIC_MODEL", "gemini-2.5-flash")
-        response = client.models.generate_content(
-            model=model,
-            contents=user_prompt,
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type="application/json",
-                temperature=0.1,
-                max_output_tokens=max_tokens,
-                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        return response.text
-    except Exception as exc:
-        logger.warning("Gemini Flash call failed: %s", exc)
-        return None
+def _call_flash(system_prompt: str, user_prompt: str, max_tokens: int) -> str | None:
+    """Single Gemini Flash call via the shared Vertex AI client. Returns text
+    or None on any failure (unavailable SDK/ADC, API error)."""
+    model = os.getenv("GEMINI_CRITIC_MODEL", _MODEL_CRITIC)
+    return call_gemini(
+        model,
+        user_prompt,
+        system_prompt,
+        temperature=0.1,
+        max_output_tokens=max_tokens,
+        thinking_budget=0,
+    )
 
 
 # ─── JSON helpers ─────────────────────────────────────────────────────────────
@@ -167,16 +155,20 @@ def _extract_json(text: str | None) -> dict | None:
 
 # ─── Core agent functions ─────────────────────────────────────────────────────
 
-def critique_scene(scene: dict, transcript: str, client: Any) -> list[dict]:
+def critique_scene(scene: dict, transcript: str, client: Any = None) -> list[dict]:
     """
     Ask the critic to review the scene against the transcript.
     Returns a list of issue dicts (empty if verdict is OK or on any failure).
+
+    `client` is accepted and ignored for backward compatibility with older
+    call sites — the shared llm/gemini_client.py module manages its own
+    cached client internally now.
     """
     user_prompt = (
         f"USER REQUEST: {json.dumps(transcript)}\n\n"
         f"SCENE JSON: {json.dumps(scene, separators=(',', ':'))}"
     )
-    raw    = _call_flash(client, _CRITIC_SYSTEM, user_prompt, max_tokens=2000)
+    raw    = _call_flash(_CRITIC_SYSTEM, user_prompt, max_tokens=2000)
     parsed = _extract_json(raw)
     if not isinstance(parsed, dict):
         logger.debug("Critic: malformed response — skipping")
@@ -220,12 +212,15 @@ def _restore_meshes(original: dict, fixed: dict, allowed_paths: set[str]) -> dic
 def fix_scene(
     scene: dict,
     issues: list[dict],
-    client: Any,
+    client: Any = None,
     verified_assets: list[dict] | None = None,
 ) -> dict | None:
     """
     Ask the fixer to apply the listed issues to the scene.
     Returns the corrected scene dict or None if the fixer fails or returns garbage.
+
+    `client` is accepted and ignored for backward compatibility — see
+    critique_scene() docstring.
     """
     mesh_note = ""
     if verified_assets:
@@ -242,7 +237,7 @@ def fix_scene(
         f"ISSUES TO FIX: {json.dumps(issues, separators=(',', ':'))}"
         f"{mesh_note}"
     )
-    raw    = _call_flash(client, _FIXER_SYSTEM, user_prompt, max_tokens=4000)
+    raw    = _call_flash(_FIXER_SYSTEM, user_prompt, max_tokens=4000)
     parsed = _extract_json(raw)
     if not isinstance(parsed, dict):
         logger.debug("Fixer: malformed response")
@@ -250,7 +245,7 @@ def fix_scene(
     return parsed
 
 
-# ─── Public entry point ───────────────────────────────────────────────────────
+# ─── Public entry points ──────────────────────────────────────────────────────
 
 def critique_and_fix(
     scene: dict,
@@ -258,7 +253,11 @@ def critique_and_fix(
     verified_assets: list[dict] | None = None,
 ) -> dict:
     """
-    Full critic → optional fixer pass.
+    Single critic → optional fixer pass (one iteration, no loop).
+
+    Kept for any caller that wants a single-shot critique/fix rather than
+    the iterative loop — critique_and_fix_loop() (below) is what
+    pipeline_runner.py's Stage 8 actually uses.
 
     Always returns a valid scene dict — the original if anything fails.
     Failures are completely silent at the scene level; decisions are logged
@@ -266,12 +265,7 @@ def critique_and_fix(
     """
     allowed_paths = {a["path"] for a in (verified_assets or [])}
     try:
-        client = _get_gemini_client()
-        if client is None:
-            logger.debug("Critic/fixer skipped: google-genai not installed or Vertex AI client failed")
-            return scene
-
-        issues = critique_scene(scene, transcript, client)
+        issues = critique_scene(scene, transcript)
 
         if not issues:
             logger.info("Critic: verdict OK")
@@ -280,7 +274,7 @@ def critique_and_fix(
         categories = [i.get("category", "?") for i in issues]
         logger.info("Critic: %d issue(s) → running fixer  %s", len(issues), categories)
 
-        fixed = fix_scene(scene, issues, client, verified_assets)
+        fixed = fix_scene(scene, issues, verified_assets=verified_assets)
         if fixed and isinstance(fixed.get("objects"), list) and fixed["objects"]:
             fixed = _restore_meshes(scene, fixed, allowed_paths)
             logger.info(
@@ -296,3 +290,82 @@ def critique_and_fix(
     except Exception as exc:
         logger.warning("Critic/fixer pipeline exception: %s — keeping original scene", exc)
         return scene
+
+
+def critique_and_fix_loop(
+    scene: dict,
+    transcript: str,
+    verified_assets: list[dict] | None = None,
+    max_iterations: int = 3,
+    run_id: str = "",
+    on_event: OnEvent | None = None,
+) -> dict:
+    """
+    Iterative generate -> critique -> fix -> re-critique loop, capped at
+    `max_iterations` (default 3, matching pipeline/repair_loop.py's own
+    max_iterations=3 convention). Short-circuits as soon as a critique pass
+    finds no issues.
+
+    Each iteration is a separately-numbered, separately-timed pipeline event
+    ("critic_iteration_1", "critic_iteration_2", ...) so the frontend can
+    show live "iteration N of max_iterations, found K issues, fixing..."
+    progress rather than a single opaque black-box stage.
+
+    Always returns a valid scene dict — the last good scene if anything
+    fails partway through. Never raises.
+    """
+    emit = make_emitter(run_id, on_event)
+    allowed_paths = {a["path"] for a in (verified_assets or [])}
+    current = scene
+
+    for iteration in range(1, max_iterations + 1):
+        stage_id = f"critic_iteration_{iteration}"
+        label = f"Critic — Iteration {iteration}/{max_iterations}"
+        emit(stage_id, STARTED, label)
+        t0 = time.monotonic()
+
+        try:
+            issues = critique_scene(current, transcript)
+        except Exception as exc:
+            logger.warning("Critic iteration %d: critique failed: %s — stopping loop", iteration, exc)
+            emit(stage_id, COMPLETED, label, elapsed_ms=int((time.monotonic() - t0) * 1000))
+            break
+
+        if not issues:
+            logger.info("Critic iteration %d: verdict OK — loop complete", iteration)
+            emit(stage_id, OUTPUT, label, payload={"iteration": iteration, "verdict": "OK", "issues": []})
+            emit(stage_id, COMPLETED, label, elapsed_ms=int((time.monotonic() - t0) * 1000))
+            break
+
+        categories = [i.get("category", "?") for i in issues]
+        logger.info("Critic iteration %d: %d issue(s) → running fixer  %s", iteration, len(issues), categories)
+        emit(stage_id, OUTPUT, label, payload={"iteration": iteration, "verdict": "HAS_ISSUES", "issues": issues})
+
+        try:
+            fixed = fix_scene(current, issues, verified_assets=verified_assets)
+        except Exception as exc:
+            logger.warning("Critic iteration %d: fixer failed: %s — keeping previous scene", iteration, exc)
+            emit(stage_id, COMPLETED, label, elapsed_ms=int((time.monotonic() - t0) * 1000))
+            break
+
+        if fixed and isinstance(fixed.get("objects"), list) and fixed["objects"]:
+            fixed = _restore_meshes(current, fixed, allowed_paths)
+            logger.info(
+                "Critic iteration %d: fixer corrected scene (%d objects, was %d)",
+                iteration, len(fixed["objects"]), len(current.get("objects", [])),
+            )
+            emit(stage_id, OUTPUT, label, payload={
+                "iteration": iteration, "fixed": True,
+                "object_count_before": len(current.get("objects", [])),
+                "object_count_after": len(fixed["objects"]),
+                "issues_addressed": issues,
+            })
+            current = fixed
+        else:
+            logger.warning("Critic iteration %d: fixer returned invalid/empty scene — stopping loop", iteration)
+            emit(stage_id, COMPLETED, label, elapsed_ms=int((time.monotonic() - t0) * 1000))
+            break
+
+        emit(stage_id, COMPLETED, label, elapsed_ms=int((time.monotonic() - t0) * 1000))
+
+    return current

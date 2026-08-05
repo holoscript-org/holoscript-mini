@@ -1,51 +1,48 @@
 {
-  "name": "Abstract Solar System with Saturn",
-  "summary": "This scene presents an artistic and abstract representation of a solar system. A central, glowing object acts as the star, holding several celestial bodies in orbit through its implied gravitational pull. The scene includes a model of Saturn with its iconic rings, an asteroid, and a jewel-like object, each following its own orbital path, demonstrating the fundamental principles of orbital mechanics in a stylized cosmic environment.",
+  "name": "House and Cloister Garden",
+  "summary": "This scene illustrates the integration of architectural design with landscape elements. It showcases a house positioned alongside a cloister-style garden, demonstrating how built structures can define and complement natural spaces. The inclusion of potted roses within the garden highlights the use of specific flora to add detail and focal points, emphasizing the deliberate design choices in creating a harmonious living environment.",
   "objects": [
     {
-      "id": "central_star",
-      "type": "mesh",
+      "id": "house",
+      "type": "primitive",
       "position": [
-        0,
-        0,
+        -7,
+        1.5,
         0
       ],
       "material": {
         "type": "standard",
-        "color": "#ffffff",
-        "roughness": 0.6,
-        "metalness": 0.1,
-        "emissive": "#ffaa44",
-        "emissiveIntensity": 0.8
+        "color": "#f5deb3",
+        "roughness": 0.9,
+        "metalness": 0
       },
       "animation": {
-        "type": "spin",
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "speed": 0.05
+        "type": "none"
       },
-      "model": "/assets/meshes/abstract/planet.glb",
+      "geometry": {
+        "type": "box",
+        "width": 4,
+        "height": 3,
+        "depth": 5
+      },
       "rotation": [
         0,
-        0,
+        -15,
         0
       ],
       "scale": [
-        4,
-        4,
-        4
+        1,
+        1,
+        1
       ],
-      "label": "Central Star",
-      "description": "This abstract object represents the central star of the system. Its mass provides the gravitational force that keeps all other bodies in orbit, and its light illuminates the scene."
+      "label": "House",
+      "description": "A simple representation of a dwelling, providing context and scale for the adjacent garden space. Its solid form contrasts with the open area of the garden."
     },
     {
-      "id": "saturn",
+      "id": "house_garden",
       "type": "mesh",
       "position": [
-        15,
+        -4,
         0,
         0
       ],
@@ -53,154 +50,53 @@
         "type": "standard",
         "color": "#ffffff",
         "roughness": 0.8,
-        "metalness": 0.0
-      },
-      "animation": {
-        "type": "orbit",
-        "center": [
-          0,
-          0,
-          0
-        ],
-        "speed": 0.2,
-        "phase": 0.5
-      },
-      "model": "/assets/meshes/planets/planets.glb",
-      "rotation": [
-        0,
-        0,
-        0
-      ],
-      "scale": [
-        3,
-        3,
-        3
-      ],
-      "label": "Saturn",
-      "description": "A representation of the planet Saturn, known for its extensive ring system. It orbits the central star at a significant distance."
-    },
-    {
-      "id": "saturn_rings",
-      "type": "mesh",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "material": {
-        "type": "standard",
-        "color": "#ffffff",
-        "roughness": 0.7,
-        "metalness": 0.2,
-        "opacity": 0.8,
-        "transparent": true
+        "metalness": 0
       },
       "animation": {
         "type": "none"
       },
-      "parent": "saturn",
-      "model": "/assets/meshes/abstract/ring.glb",
-      "rotation": [
-        90,
-        20,
-        0
-      ],
-      "scale": [
-        4,
-        4,
-        0.1
-      ],
-      "label": "Saturn's Rings",
-      "description": "This mesh represents the iconic rings of Saturn, composed of countless small particles of ice and rock orbiting the planet. The tilt is characteristic of Saturn's orientation."
-    },
-    {
-      "id": "orbiting_jewel",
-      "type": "mesh",
-      "position": [
-        8,
-        0,
-        0
-      ],
-      "material": {
-        "type": "standard",
-        "color": "#ffffff",
-        "roughness": 0.1,
-        "metalness": 0.9
-      },
-      "animation": {
-        "type": "orbit",
-        "center": [
-          0,
-          0,
-          0
-        ],
-        "speed": 0.5,
-        "phase": 2.1
-      },
-      "model": "/assets/meshes/abstract/jewel.glb",
-      "rotation": [
-        0,
-        0,
-        0
-      ],
+      "model": "/assets/meshes/abstract/cloister_garden.glb",
       "scale": [
         2,
-        2,
+        1,
         2
       ],
-      "label": "Crystal Planet",
-      "description": "An abstract, jewel-like object orbiting the star. It represents a unique or exotic celestial body, adding to the artistic nature of the scene."
+      "label": "Garden",
+      "description": "A cloister-style garden, providing a structured and serene space adjacent to the house. Its large, open design is typical of enclosed courtyards."
     },
     {
-      "id": "asteroid_belt_object",
+      "id": "roses_in_garden",
       "type": "mesh",
       "position": [
-        22,
-        0,
-        0
+        1.5,
+        0.9,
+        -1.5
       ],
       "material": {
         "type": "standard",
-        "color": "#ffffff",
-        "roughness": 0.9,
-        "metalness": 0.1
+        "color": "#ff0000",
+        "roughness": 0.7,
+        "metalness": 0
       },
       "animation": {
-        "type": "orbit",
-        "center": [
-          0,
-          0,
-          0
-        ],
-        "speed": 0.15,
-        "phase": 3.4
+        "type": "none"
       },
-      "model": "/assets/meshes/planets/asteroid.glb",
-      "rotation": [
-        30,
-        60,
-        90
-      ],
+      "parent": "house_garden",
+      "model": "/assets/meshes/abstract/flower_pot.glb",
       "scale": [
-        1.5,
-        1.5,
-        1.5
+        0.4,
+        0.4,
+        0.4
       ],
-      "label": "Asteroid",
-      "description": "A rocky asteroid, representing the debris and minor planets that are commonly found orbiting stars, often in vast belts."
+      "label": "Roses",
+      "description": "Potted roses add a touch of color and life to the garden. This element serves as a decorative focal point within the larger garden structure."
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.15,
+      "intensity": 0.3,
       "color": "#ffffff",
-      "castShadow": false
-    },
-    {
-      "type": "point",
-      "intensity": 6.0,
-      "color": "#ffddaa",
       "position": [
         0,
         0,
@@ -210,25 +106,26 @@
     },
     {
       "type": "directional",
+      "intensity": 1.2,
+      "color": "#ffffff",
+      "castShadow": false
+    },
+    {
+      "type": "directional",
       "intensity": 0.6,
-      "color": "#aaccff",
-      "position": [
-        -30,
-        20,
-        -30
-      ],
-      "castShadow": true
+      "color": "#cccccc",
+      "castShadow": false
     }
   ],
   "camera": {
     "position": [
-      0,
-      15,
-      45
+      -4,
+      6.95,
+      19
     ],
     "target": [
-      0,
-      0,
+      -4,
+      1.25,
       0
     ],
     "fov": 60
