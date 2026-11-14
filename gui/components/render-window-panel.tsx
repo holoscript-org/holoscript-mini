@@ -3,9 +3,12 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { HoloPanel } from "./holo-panel"
 import { Monitor } from "lucide-react"
+import { renderControlUrl, renderStreamUrl } from "@/lib/api"
 
-const STREAM_URL  = "http://localhost:8000/stream"
-const CONTROL_URL = "http://localhost:8000/control"
+// Derived from lib/api.ts BASE_URL so the backend origin lives in exactly one
+// place — these were hardcoded to localhost:8000, which broke any deployment.
+const STREAM_URL  = renderStreamUrl()
+const CONTROL_URL = renderControlUrl()
 
 // Keys that map to renderer actions (mirrors safe transform subset).
 const KEY_ACTION_MAP: Record<string, string> = {

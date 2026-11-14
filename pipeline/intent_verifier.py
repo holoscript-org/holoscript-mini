@@ -37,12 +37,14 @@ import time
 from typing import Any
 
 from core.utils.logger import get_logger
-from llm.gemini_client import call_gemini
+from llm.gemini_client import call_gemini, stage_model
 from pipeline.events import OnEvent, make_emitter, COMPLETED, OUTPUT, STARTED
 
 logger = get_logger("intent_verifier")
 
-_MODEL_VERIFIER = "gemini-2.5-flash"
+# Override key: GEMINI_VERIFIER_MODEL (falls back to the flash tier).
+_MODEL_ENV = "GEMINI_VERIFIER_MODEL"
+_MODEL_TIER = "flash"
 
 _VERIFIER_SYSTEM = """\
 You are a scene-intent auditor for a 3D/holographic scene generator. You
@@ -123,7 +125,7 @@ def verify_intent(
     )
 
     raw = call_gemini(
-        _MODEL_VERIFIER, prompt, _VERIFIER_SYSTEM,
+        stage_model(_MODEL_ENV, _MODEL_TIER), prompt, _VERIFIER_SYSTEM,
         temperature=0.1, max_output_tokens=1200, thinking_budget=0,
     )
     parsed = _extract_json(raw)

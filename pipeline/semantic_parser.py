@@ -20,31 +20,29 @@ SIMILARITY_THRESHOLD = 0.35
 OBJECT_EMBEDDING_THRESHOLD = 0.40
 MODEL_NAME = "all-MiniLM-L6-v2"
 
-_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "by",
-    "for",
-    "from",
-    "in",
-    "is",
-    "it",
-    "me",
-    "of",
-    "on",
-    "or",
-    "show",
-    "the",
-    "to",
-    "with",
-    "you",
-    "your",
-}
+from pipeline.text_utils import MOTION_WORDS as _MOTION_WORDS
+from pipeline.text_utils import STOPWORDS as _STOPWORDS
+
+
+def _contiguous_runs(tokens: list[str], skip: set[str]) -> list[list[str]]:
+    """
+    Split `tokens` into runs of consecutive keepable words, breaking at every
+    token in `skip`. Phrases built from these runs can never join words that
+    had a stopword (or an already-matched concept) between them — otherwise
+    "saturn and its rings" yields the phrase "saturn its rings".
+    """
+    runs: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in skip:
+            if current:
+                runs.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        runs.append(current)
+    return runs
 
 
 class SemanticParser:
@@ -278,15 +276,24 @@ class SemanticParser:
                 unresolved.append(token)
 
         # Include short noun-phrase candidates to prefer phrase-level live search.
+        # Runs break at stopwords and at already-matched concepts, so a phrase
+        # never joins words that were not genuinely adjacent in the transcript.
+        # Motion verbs break runs here too. These tokens feed live asset search,
+        # and motion is handled by the physics system from the intent buckets —
+        # "basketball falling" is never a model to fetch. Single motion words
+        # that ARE real concepts (orbit/spin/rotate, type=effect) are unaffected:
+        # the loop above skips anything already in _concept_map.
         phrase_tokens: set[str] = set()
-        for size in (3, 2):
-            for i in range(0, len(clean_tokens) - size + 1):
-                phrase = " ".join(clean_tokens[i : i + size])
-                if phrase in self._concept_map or phrase in self._synonym_map:
-                    continue
-                if phrase not in unresolved:
-                    unresolved.append(phrase)
-                phrase_tokens.update(clean_tokens[i : i + size])
+        skip = set(_STOPWORDS) | set(_MOTION_WORDS) | set(blocked_tokens)
+        for run in _contiguous_runs(tokens, skip):
+            for size in (3, 2):
+                for i in range(0, len(run) - size + 1):
+                    phrase = " ".join(run[i : i + size])
+                    if phrase in self._concept_map or phrase in self._synonym_map:
+                        continue
+                    if phrase not in unresolved:
+                        unresolved.append(phrase)
+                    phrase_tokens.update(run[i : i + size])
 
         if phrase_tokens:
             unresolved = [item for item in unresolved if item not in phrase_tokens]

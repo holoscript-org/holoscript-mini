@@ -15,7 +15,7 @@
 
 import { Component, createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber"
-import { Environment, OrbitControls, PerspectiveCamera, useGLTF, useTexture } from "@react-three/drei"
+import { Environment, Html, OrbitControls, PerspectiveCamera, useGLTF, useTexture } from "@react-three/drei"
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js"
 import * as THREE from "three"
 import type { GestureControlRefs } from "@/hooks/useGestureControl"
@@ -500,9 +500,107 @@ function SceneObjectNode({ obj, children }: { obj: SceneObject; children?: React
       {isSelected && (
         <pointLight color="#00ffff" intensity={6} distance={3} decay={2} />
       )}
+      {/* Educational label — only for objects the architect chose to name.
+          Sits inside this group so it follows orbit/physics/spin animation. */}
+      {obj.label && (
+        <SceneLabel
+          text={obj.label}
+          description={obj.description}
+          anchor={labelAnchor(obj)}
+          selected={isSelected}
+        />
+      )}
       {/* Child objects in parent-local space */}
       {children}
     </group>
+  )
+}
+
+// ─── In-scene object labels ──────────────────────────────────────────────────
+
+/**
+ * Anchor point for a label, in the object's LOCAL space — just clear of the
+ * geometry rather than buried inside it. The parent group applies obj.scale,
+ * so a mesh scaled [3,3,3] pushes its label three times further out, which is
+ * correct because the object is three times bigger.
+ *
+ * Must return a full vector, not just a height: a cylinder given from/to is
+ * drawn at the MIDPOINT of that segment while its group stays at obj.position.
+ * Bond cylinders are typically written as position [0,0,0] with from/to
+ * carrying the real placement, so anchoring to the group origin put every bond
+ * label on top of the atom at the centre of the molecule.
+ */
+function labelAnchor(obj: SceneObject): [number, number, number] {
+  const margin = 0.22
+  if (obj.type === "mesh") return [0, 1 + margin, 0]   // GLBs normalize to a 2-unit box
+
+  const g = obj.geometry
+  if (!g) return [0, 1 + margin, 0]
+
+  switch (g.type) {
+    case "sphere":
+      return [0, (g.radius ?? 1) + margin, 0]
+    case "capsule":
+      return [0, (g.radius ?? 0.5) + (g.length ?? 1) / 2 + margin, 0]
+    case "box":
+    case "plane":
+      return [0, (g.height ?? 1) / 2 + margin, 0]
+    case "torus":
+      return [0, (g.radius ?? 1) + (g.tube ?? 0.2) + margin, 0]
+    case "ring":
+      return [0, (g.outerRadius ?? 1) + margin, 0]
+    case "cylinder": {
+      const { from, to } = g
+      if (from && to) {
+        return [
+          (from[0] + to[0]) / 2,
+          (from[1] + to[1]) / 2 + (g.radius ?? 0.1) + margin,
+          (from[2] + to[2]) / 2,
+        ]
+      }
+      return [0, (g.height ?? 2) / 2 + margin, 0]
+    }
+    default:
+      return [0, 1 + margin, 0]
+  }
+}
+
+/**
+ * Floating label anchored to a scene object.
+ *
+ * Rendered inside the object's animated <group>, so it tracks orbiting,
+ * bouncing and swinging objects for free. `pointer-events: none` is essential:
+ * these are DOM nodes layered over the canvas, and without it they would
+ * swallow the pointer events that pinch-to-select depends on.
+ */
+function SceneLabel({
+  text, description, anchor, selected,
+}: {
+  text: string
+  description?: string
+  anchor: [number, number, number]
+  selected: boolean
+}) {
+  return (
+    <Html
+      position={anchor}
+      center
+      zIndexRange={[10, 0]}
+      style={{ pointerEvents: "none", userSelect: "none" }}
+    >
+      <div
+        title={description}
+        className={[
+          "whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] leading-none",
+          "border backdrop-blur-sm transition-colors",
+          selected
+            ? "border-cyan-300/80 bg-black/80 text-cyan-200"
+            : "border-primary/30 bg-black/60 text-primary/80",
+        ].join(" ")}
+      >
+        {text}
+      </div>
+    </Html>
   )
 }
 

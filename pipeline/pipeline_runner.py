@@ -58,6 +58,7 @@ from pipeline.intent_verifier import verify_and_realign
 from pipeline.scene_validator import validate_scene
 from pipeline.repair_loop import DEMO_FALLBACK, repair
 from pipeline.events import OnEvent, make_emitter, new_run_id, COMPLETED, OUTPUT, STARTED
+from pipeline.text_utils import SEARCH_STOP, contiguous_ngrams, is_primitive_only
 
 # Legacy path (used as fallback if architect fails)
 from pipeline.retrieval import retrieve
@@ -115,50 +116,42 @@ def _legacy_build(transcript: str, resolved_intent: dict, unresolved: list) -> d
 # Poly Pizza helpers
 # ---------------------------------------------------------------------------
 
-_STOPWORDS = frozenset({
-	"a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in",
-	"is", "it", "me", "of", "on", "or", "show", "the", "to", "with",
-	"you", "your", "give", "make", "create", "see", "let", "display",
-})
-
-
 def _extract_candidate_phrases(transcript: str, unresolved: list[str]) -> list[str]:
 	"""
 	Return ordered list of phrases to try on Poly Pizza.
-	Priority: bigrams of adjacent unresolved words > individual unresolved words.
+	Priority: multi-word phrases of adjacent unresolved words > individual words.
 	Generic — works for any concept without hardcoding examples.
+
+	`transcript` here is the Stage-2 optimized prompt, which is fluent prose
+	rather than a terse command. n-grams come from contiguous_ngrams(), which
+	never joins words separated by a stopword, prose filler, or motion verb —
+	reading adjacency off a flat stripped list instead turned
+	"saturn and its rings" into the phrase "saturn its rings".
 	"""
-	import re
-	words = [
-		w for w in re.findall(r"[a-z]+", transcript.lower())
-		if w not in _STOPWORDS and len(w) >= 3
-	]
 	unresolved_set = {t.lower().strip() for t in unresolved}
 
 	phrases: list[str] = []
 
-	# Try trigrams first, then bigrams (adjacent unresolved words)
-	for n in (3, 2):
-		for i in range(len(words) - n + 1):
-			chunk = words[i : i + n]
-			# Only if all words in the chunk are unresolved (KB didn't know them)
-			if all(w in unresolved_set for w in chunk):
-				phrase = " ".join(chunk)
-				if phrase not in phrases:
-					phrases.append(phrase)
+	# Multi-word phrases, longest first — only where every word is unresolved
+	for phrase in contiguous_ngrams(transcript, sizes=(3, 2), extra_stop=SEARCH_STOP):
+		if all(w in unresolved_set for w in phrase.split()):
+			if phrase not in phrases:
+				phrases.append(phrase)
 
-	phrase_words = {
-		word
-		for phrase in phrases
-		for word in phrase.split()
-	}
+	phrase_words = {word for phrase in phrases for word in phrase.split()}
 
-	# Then individual unresolved words (fallback)
+	# Then individual unresolved tokens (fallback).
+	# The parser can hand back multi-word tokens it built itself, so check every
+	# word — a bare `t not in SEARCH_STOP` test passes phrases like
+	# "basketball falling" straight through, since the phrase as a whole is
+	# obviously not a member of the stopword set.
 	for token in unresolved:
 		t = token.strip().lower()
 		if t in phrase_words:
 			continue
-		if t and len(t) >= 3 and t not in _STOPWORDS and t not in phrases:
+		if any(w in SEARCH_STOP for w in t.split()):
+			continue
+		if t and len(t) >= 3 and t not in phrases:
 			phrases.append(t)
 
 	return phrases
@@ -197,6 +190,18 @@ def _build_live_candidates(
 	for phrase in unresolved_phrases:
 		if phrase not in already_covered:
 			candidates.append({"concept": phrase, "category": "abstract"})
+
+	# Drop concepts the architect must build from primitives. Fetching a mesh for
+	# these creates a rule conflict: the architect is told astronomical/atomic
+	# concepts are primitives, but also that any concept present in AVAILABLE
+	# MESHES *must* be a mesh — and the mesh rule wins.
+	kept: list[dict[str, str]] = []
+	for c in candidates:
+		if is_primitive_only(c["concept"]):
+			logger.info("Live search: skipping '%s' — primitive-only concept", c["concept"])
+			continue
+		kept.append(c)
+	candidates = kept
 
 	# Deduplicate, cap at 4 to keep latency reasonable
 	seen: set[str] = set()

@@ -15,17 +15,23 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
+from core.utils.logger import get_logger
 from pipeline.cache import get_cached_asset
 from pipeline.knowledge_base.embedder import embed_concept
 from pipeline.knowledge_base.mongo_client import lookup_concept, register_concept
+from pipeline.text_utils import result_matches_query
+
+logger = get_logger("live_search")
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MESHES = _ROOT / "core" / "assets" / "meshes"
 
 load_dotenv(_ROOT / ".env")
 
-MAX_BYTES = 10 * 1024 * 1024
-POLYPIZZA_URL = "https://api.poly.pizza/v1.1/search/{query}"
+MAX_BYTES = int(os.getenv("POLYPIZZA_MAX_BYTES", 10 * 1024 * 1024))
+POLYPIZZA_URL = os.getenv(
+    "POLYPIZZA_API_URL", "https://api.poly.pizza/v1.1/search/{query}"
+)
 
 
 def _safe_filename(name: str, suffix: str = ".glb") -> str:
@@ -193,7 +199,10 @@ def fetch_live_assets(
         except Exception:
             continue
 
-        for item in results[:max_per_concept]:
+        accepted = 0
+        for item in results:
+            if accepted >= max_per_concept:
+                break
             if not isinstance(item, dict):
                 continue
             dl_url = _poly_download_url(item)
@@ -201,12 +210,23 @@ def fetch_live_assets(
                 continue
 
             title = item.get("Title") or item.get("title") or query
-            filename = _safe_filename(str(title))
-            original_dest = _MESHES / category / filename
 
             item_tags = item.get("Tags") or item.get("tags") or []
             if isinstance(item_tags, str):
                 item_tags = item_tags.split()
+
+            # Poly Pizza always ranks *something* first and never reports "no
+            # match", so an unrelated model comes back rather than nothing.
+            # Require a shared content word before accepting — and before the
+            # concept gets permanently registered in MongoDB below.
+            if not result_matches_query(str(query), str(title), list(item_tags)):
+                logger.info(
+                    "Poly Pizza: rejected '%s' for '%s' — no shared term", title, query
+                )
+                continue
+
+            filename = _safe_filename(str(title))
+            original_dest = _MESHES / category / filename
             tags = list(item_tags) + [str(query), category.rstrip("s")]
             author = (
                 _json_get(item, "Creator", "Username", default="")
@@ -221,6 +241,7 @@ def fetch_live_assets(
                     str(query), asset_src, category, tags, author or None, license_str or None
                 )
                 found.append({"concept": query, "sidecar": doc, "source": "cache"})
+                accepted += 1
                 continue
 
             dest = _unique_glb_path(category, filename)
@@ -236,6 +257,7 @@ def fetch_live_assets(
                     update_embedding=True,
                 )
                 found.append({"concept": query, "sidecar": doc, "source": "download"})
+                accepted += 1
 
             if delay_s:
                 time.sleep(delay_s)

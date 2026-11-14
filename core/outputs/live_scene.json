@@ -1,48 +1,12 @@
 {
-  "name": "House and Cloister Garden",
-  "summary": "This scene illustrates the integration of architectural design with landscape elements. It showcases a house positioned alongside a cloister-style garden, demonstrating how built structures can define and complement natural spaces. The inclusion of potted roses within the garden highlights the use of specific flora to add detail and focal points, emphasizing the deliberate design choices in creating a harmonious living environment.",
+  "name": "Human Skeletal System",
+  "summary": "This scene illustrates the human skeletal system, the body's internal framework. Composed of 206 bones, the skeleton provides crucial structural support, protects vital internal organs, and facilitates movement through articulation with muscles. It is broadly categorized into the axial skeleton, which forms the central axis of the body, and the appendicular skeleton, which includes the limbs and their attachments.",
   "objects": [
     {
-      "id": "house",
-      "type": "primitive",
-      "position": [
-        -7,
-        1.5,
-        0
-      ],
-      "material": {
-        "type": "standard",
-        "color": "#f5deb3",
-        "roughness": 0.9,
-        "metalness": 0
-      },
-      "animation": {
-        "type": "none"
-      },
-      "geometry": {
-        "type": "box",
-        "width": 4,
-        "height": 3,
-        "depth": 5
-      },
-      "rotation": [
-        0,
-        -15,
-        0
-      ],
-      "scale": [
-        1,
-        1,
-        1
-      ],
-      "label": "House",
-      "description": "A simple representation of a dwelling, providing context and scale for the adjacent garden space. Its solid form contrasts with the open area of the garden."
-    },
-    {
-      "id": "house_garden",
+      "id": "human_skeleton",
       "type": "mesh",
       "position": [
-        -4,
+        0,
         0,
         0
       ],
@@ -50,84 +14,63 @@
         "type": "standard",
         "color": "#ffffff",
         "roughness": 0.8,
-        "metalness": 0
+        "metalness": 0.0
       },
       "animation": {
         "type": "none"
       },
-      "model": "/assets/meshes/abstract/cloister_garden.glb",
+      "model": "/assets/meshes/abstract/lkn.glb",
       "scale": [
-        2,
-        1,
-        2
+        4,
+        4,
+        4
       ],
-      "label": "Garden",
-      "description": "A cloister-style garden, providing a structured and serene space adjacent to the house. Its large, open design is typical of enclosed courtyards."
-    },
-    {
-      "id": "roses_in_garden",
-      "type": "mesh",
-      "position": [
-        1.5,
-        0.9,
-        -1.5
-      ],
-      "material": {
-        "type": "standard",
-        "color": "#ff0000",
-        "roughness": 0.7,
-        "metalness": 0
-      },
-      "animation": {
-        "type": "none"
-      },
-      "parent": "house_garden",
-      "model": "/assets/meshes/abstract/flower_pot.glb",
-      "scale": [
-        0.4,
-        0.4,
-        0.4
-      ],
-      "label": "Roses",
-      "description": "Potted roses add a touch of color and life to the garden. This element serves as a decorative focal point within the larger garden structure."
+      "label": "Human Skeleton",
+      "description": "The complete framework of 206 bones that gives the human body its form. It is divided into the axial skeleton (skull, spine, ribs) which protects the core organs, and the appendicular skeleton (limbs and girdles) which facilitates movement."
     }
   ],
   "lights": [
     {
       "type": "ambient",
-      "intensity": 0.3,
-      "color": "#ffffff",
-      "position": [
-        0,
-        0,
-        0
-      ],
+      "intensity": 0.4,
+      "color": "#ffe0c0",
       "castShadow": false
     },
     {
       "type": "directional",
-      "intensity": 1.2,
+      "intensity": 1.0,
       "color": "#ffffff",
       "castShadow": false
     },
     {
       "type": "directional",
       "intensity": 0.6,
-      "color": "#cccccc",
+      "color": "#e0e0ff",
+      "castShadow": false
+    },
+    {
+      "type": "point",
+      "intensity": 0.2,
+      "color": "#c0e0ff",
+      "position": [
+        0,
+        2,
+        -3
+      ],
       "castShadow": false
     }
   ],
   "camera": {
     "position": [
-      -4,
-      6.95,
-      19
+      0,
+      5.88,
+      7.6
     ],
     "target": [
-      -4,
-      1.25,
+      0,
+      3.6,
       0
     ],
-    "fov": 60
+    "fov": 50
   }
 }

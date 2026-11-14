@@ -50,14 +50,17 @@ import time
 from typing import Any
 
 from core.utils.logger import get_logger
-from llm.gemini_client import call_llm
+from llm.gemini_client import call_llm, model_groq, stage_model
 from pipeline.events import OnEvent, make_emitter, COMPLETED, OUTPUT, STARTED
 
 logger = get_logger("scene_architect")
 
-_MODEL_GEMINI_PRO = "gemini-2.5-pro"
-_MODEL_GEMINI_FLASH = "gemini-2.5-flash"
-_MODEL_GROQ = "llama-3.3-70b-versatile"
+# Override keys: GEMINI_ARCHITECT_MODEL for the two heavy passes (layout/detail),
+# GEMINI_FINISH_MODEL for the lighting/camera pass. Both fall back to their tier.
+# NOTE: GEMINI_ARCHITECT_MODEL was declared in .env but read by nothing between
+# the 2026-08 restructure and this change — setting it silently did nothing.
+_ARCHITECT_MODEL_ENV = "GEMINI_ARCHITECT_MODEL"
+_FINISH_MODEL_ENV = "GEMINI_FINISH_MODEL"
 
 # ---------------------------------------------------------------------------
 # Schema block — mirrors scene_validator.py exactly
@@ -74,6 +77,13 @@ Object (primitive):
       cylinder→ radius, from:[x,y,z], to:[x,y,z]   ← use this for tubes, vessels, arms
       ring    → innerRadius, outerRadius, thetaSegments (≥3, default 128 for smooth)
       torus   → radius, tube
+      ORBITAL PLANE — CRITICAL: ring and torus are built in the XY plane (standing
+      upright, facing the camera), but orbit animation moves objects in the XZ plane
+      (flat, around the Y axis). A shell/orbit ring drawn to contain orbiting objects
+      MUST therefore use "rotation": [90, 0, 0] to lay it flat into the orbital plane.
+      Without it the ring stands vertical and the orbiting objects pass straight
+      through it, crossing at only two points. This applies to electron shells,
+      planetary orbit rings, and any ring meant to trace a circular path.
       capsule → radius, length
       plane   → width, height },
     "position": [x,y,z],
@@ -87,7 +97,9 @@ Object (primitive):
       spin    → "axis":[x,y,z],   "speed": float
       physics → see PHYSICS ANIMATION section below },
     "parent": "other_id",       ← optional; child position is relative to parent
-    "label": "Human-readable",  ← optional, show for key objects only
+    "label": "Human-readable",  ← short NAME of the thing, drawn floating beside it
+                                   in the 3D view. Label every instance of a repeated
+                                   group (see EDUCATIONAL OUTPUT below).
     "description": "..."        ← optional; 1-2 sentence educational explanation of
                                    this object's role in the phenomenon (see EDUCATIONAL
                                    OUTPUT below). Provide for every labelled object.
@@ -153,6 +165,23 @@ Object-level "description" (1-2 sentences, on every object that has a "label"):
   BAD:  "This is the Earth."
 
 Labelling rule: give a "label" + "description" to every object a student would ask about.
+Labels are drawn floating next to the object in the 3D view, so they must read as a
+name for that thing on its own ("Hydrogen Atom", "Left Ventricle", "Saturn"), never as
+a sentence or a description.
+
+REPEATED OBJECTS — label EVERY instance, not just the first:
+  A methane molecule has four hydrogen atoms. All four are separate objects a student
+  can point at, so all four carry "label":"Hydrogen Atom". Labelling only
+  hydrogen_atom_1 leaves the other three anonymous in the view, which looks like a bug.
+  Use the SAME label text for identical things — do not number them ("Hydrogen 1",
+  "Hydrogen 2") unless the numbering carries real meaning, because it implies a
+  distinction that does not exist.
+  Their "description" may be identical too; repeating it is correct.
+
+  EXCEPTION — large repeated structures: when a group has more than ~8 identical
+  units (DNA base pairs, crystal-lattice atoms, an asteroid belt), label only 2-3
+  representative units and leave the rest unlabelled, or the view becomes unreadable.
+
 For a single imported mesh (e.g. one skeleton or one organ), the whole object gets one
 label and one description — do NOT invent labels for parts you cannot address separately.\
 """
@@ -185,6 +214,11 @@ Astronomical scale reference:
 Atomic scale reference:
   Nucleus r=0.4-0.8, electron shells at r=3/5/7, electrons r=0.1-0.15
   Proton/neutron r=0.2 packed inside nucleus zone
+  Shell rings MUST be torus with "rotation":[90,0,0] and radius EXACTLY equal to the
+  orbit radius of the electrons on that shell, so the electrons ride the ring:
+    shell torus radius 3, tube 0.02  +  electron position [3,0,0], orbit center [0,0,0]
+  Give electrons on the same shell different "phase" values so they spread out
+  (2 electrons → phase 0 and 3.14159; 4 electrons → 0, 1.5708, 3.14159, 4.71239).
 
 Molecular scale reference:
   Oxygen r=0.5, Hydrogen r=0.3, bond cylinder radius=0.1 between atom centers
@@ -424,7 +458,8 @@ def _architect_layout(
         "Generate the object layout JSON now:"
     )
 
-    raw, provider = call_llm(_MODEL_GEMINI_PRO, _MODEL_GROQ, prompt, _LAYOUT_SYSTEM)
+    raw, provider = call_llm(
+        stage_model(_ARCHITECT_MODEL_ENV, "pro"), model_groq(), prompt, _LAYOUT_SYSTEM)
     skeleton = _parse_json(raw) if raw else None
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
@@ -513,7 +548,8 @@ def _architect_detail(
         "Generate the fully-detailed objects JSON now:"
     )
 
-    raw, provider = call_llm(_MODEL_GEMINI_PRO, _MODEL_GROQ, prompt, _DETAIL_SYSTEM)
+    raw, provider = call_llm(
+        stage_model(_ARCHITECT_MODEL_ENV, "pro"), model_groq(), prompt, _DETAIL_SYSTEM)
     detailed = _parse_json(raw) if raw else None
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
@@ -585,7 +621,8 @@ def _architect_finish(
     )
 
     raw, provider = call_llm(
-        _MODEL_GEMINI_FLASH, _MODEL_GROQ, prompt, _FINISH_SYSTEM, temperature=0.4
+        stage_model(_FINISH_MODEL_ENV, "flash"), model_groq(),
+        prompt, _FINISH_SYSTEM, temperature=0.4
     )
     finish = _parse_json(raw) if raw else None
     elapsed_ms = int((time.monotonic() - t0) * 1000)

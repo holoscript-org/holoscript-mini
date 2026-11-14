@@ -36,7 +36,53 @@ try:
 except ImportError:
     GENAI_AVAILABLE = False
 
-_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+_GROQ_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
+
+_DEFAULT_LOCATION = "us-central1"
+
+# ---------------------------------------------------------------------------
+# Model resolution
+# ---------------------------------------------------------------------------
+#
+# Two tiers plus optional per-stage overrides. Resolved at CALL time, never at
+# import time, so changing .env does not require re-importing the package (and
+# so tests can monkeypatch the environment).
+#
+#   GEMINI_PRO_MODEL / GEMINI_FLASH_MODEL   tier defaults
+#   GEMINI_<STAGE>_MODEL                    per-stage override, wins if set
+#
+# Before this was centralised, five of the six LLM stages hardcoded their model
+# id and GEMINI_ARCHITECT_MODEL — still declared in .env — was read by nothing
+# at all, so setting it silently did nothing.
+
+_TIER_DEFAULTS = {
+    "pro": "gemini-2.5-pro",
+    "flash": "gemini-2.5-flash",
+}
+
+
+def model_pro() -> str:
+    return os.getenv("GEMINI_PRO_MODEL") or _TIER_DEFAULTS["pro"]
+
+
+def model_flash() -> str:
+    return os.getenv("GEMINI_FLASH_MODEL") or _TIER_DEFAULTS["flash"]
+
+
+def model_groq() -> str:
+    return os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
+
+
+def stage_model(env_key: str, tier: str = "pro") -> str:
+    """
+    Model id for one pipeline stage: the stage-specific env var if set,
+    otherwise the tier default. `tier` is "pro" or "flash".
+    """
+    override = os.getenv(env_key)
+    if override:
+        return override
+    return model_pro() if tier == "pro" else model_flash()
+
 
 _vertex_client: Any | None = None
 _vertex_client_failed = False
@@ -56,11 +102,24 @@ def get_vertex_client() -> Any | None:
         return _vertex_client
     if _vertex_client_failed or not GENAI_AVAILABLE:
         return None
+
+    # No fallback project id. This previously defaulted to a shared university
+    # project, so a missing/unloaded .env silently billed someone else's account
+    # instead of failing. Refusing to guess is the only safe behaviour.
+    project = os.getenv("GCP_PROJECT")
+    if not project:
+        logger.warning(
+            "GCP_PROJECT is not set — Vertex AI disabled, falling back to Groq. "
+            "Set GCP_PROJECT in .env to enable Gemini."
+        )
+        _vertex_client_failed = True
+        return None
+
     try:
         _vertex_client = _genai.Client(
             vertexai=True,
-            project=os.getenv("GCP_PROJECT", "reportevaluator"),
-            location=os.getenv("GCP_LOCATION", "us-central1"),
+            project=project,
+            location=os.getenv("GCP_LOCATION") or _DEFAULT_LOCATION,
             http_options=_HttpOptions(api_version="v1"),
         )
         return _vertex_client

@@ -1,4 +1,17 @@
-const BASE_URL = "http://localhost:8000"
+/**
+ * Backend origin. Single source of truth — no other module may hardcode it.
+ *
+ * NEXT_PUBLIC_API_URL is inlined at build time by Next, so it must be set in
+ * the deploy environment (Vercel project settings, or gui/.env.local for a
+ * non-default local port). The localhost fallback keeps `npm run dev` working
+ * with no configuration at all.
+ */
+export const BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "")   // tolerate a trailing slash in the env value
+
+/** Same origin as BASE_URL, with the ws/wss scheme. */
+export const WS_BASE_URL = BASE_URL.replace(/^http/, "ws")
 
 export type Frame = number[][][] | null   // [360][18][3] uint8, or null when no renderer
 
@@ -79,6 +92,15 @@ export async function fetchCommandStatus(): Promise<{ running: boolean; state: s
 // ─── Pipeline WebSocket ──────────────────────────────────────────────────────
 
 export function connectPipelineWebSocket(): WebSocket {
-  const wsUrl = BASE_URL.replace(/^http/, "ws") + "/ws/pipeline"
-  return new WebSocket(wsUrl)
+  return new WebSocket(`${WS_BASE_URL}/ws/pipeline`)
+}
+
+/** MJPEG preview stream of the desktop OpenGL renderer. */
+export function renderStreamUrl(): string {
+  return `${BASE_URL}/stream`
+}
+
+/** Endpoint for forwarding keyboard actions to the desktop renderer. */
+export function renderControlUrl(): string {
+  return `${BASE_URL}/control`
 }

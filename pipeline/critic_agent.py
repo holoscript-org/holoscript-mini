@@ -26,12 +26,14 @@ import time
 from typing import Any
 
 from core.utils.logger import get_logger
-from llm.gemini_client import call_gemini
+from llm.gemini_client import call_gemini, stage_model
 from pipeline.events import OnEvent, make_emitter, COMPLETED, OUTPUT, STARTED
 
 logger = get_logger("critic_agent")
 
-_MODEL_CRITIC = "gemini-2.5-flash"
+# Override key: GEMINI_CRITIC_MODEL (falls back to the flash tier).
+_MODEL_ENV = "GEMINI_CRITIC_MODEL"
+_MODEL_TIER = "flash"
 
 # ─── Critic system prompt ─────────────────────────────────────────────────────
 
@@ -123,7 +125,7 @@ Respond with ONLY the corrected scene JSON. No markdown, no explanation.
 def _call_flash(system_prompt: str, user_prompt: str, max_tokens: int) -> str | None:
     """Single Gemini Flash call via the shared Vertex AI client. Returns text
     or None on any failure (unavailable SDK/ADC, API error)."""
-    model = os.getenv("GEMINI_CRITIC_MODEL", _MODEL_CRITIC)
+    model = stage_model(_MODEL_ENV, _MODEL_TIER)
     return call_gemini(
         model,
         user_prompt,

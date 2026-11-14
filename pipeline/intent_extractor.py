@@ -37,13 +37,14 @@ import time
 from typing import Any
 
 from core.utils.logger import get_logger
-from llm.gemini_client import call_llm
+from llm.gemini_client import call_llm, model_groq, stage_model
 from pipeline.events import OnEvent, make_emitter, COMPLETED, OUTPUT, STARTED
 
 logger = get_logger("intent_extractor")
 
-_MODEL_GEMINI = "gemini-2.5-pro"
-_MODEL_GROQ = "llama-3.3-70b-versatile"
+# Override key: GEMINI_INTENT_MODEL (falls back to the pro tier).
+_MODEL_ENV = "GEMINI_INTENT_MODEL"
+_MODEL_TIER = "pro"
 
 _SYSTEM = """\
 You are a scene-intent analyst for a 3D/holographic scene generator. You
@@ -139,7 +140,8 @@ def extract(
         return dict(_EMPTY_IR)
 
     raw, provider = call_llm(
-        _MODEL_GEMINI, _MODEL_GROQ, optimized_prompt, _SYSTEM, temperature=0.3
+        stage_model(_MODEL_ENV, _MODEL_TIER), model_groq(),
+        optimized_prompt, _SYSTEM, temperature=0.3
     )
     parsed = _extract_json(raw)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
