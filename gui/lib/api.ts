@@ -1,4 +1,17 @@
-const BASE_URL = "http://localhost:8000"
+/**
+ * Backend origin. Single source of truth — no other module may hardcode it.
+ *
+ * NEXT_PUBLIC_API_URL is inlined at build time by Next, so it must be set in
+ * the deploy environment (Vercel project settings, or gui/.env.local for a
+ * non-default local port). The localhost fallback keeps `npm run dev` working
+ * with no configuration at all.
+ */
+export const BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "")   // tolerate a trailing slash in the env value
+
+/** Same origin as BASE_URL, with the ws/wss scheme. */
+export const WS_BASE_URL = BASE_URL.replace(/^http/, "ws")
 
 export type Frame = number[][][] | null   // [360][18][3] uint8, or null when no renderer
 
@@ -55,4 +68,39 @@ export async function pushScene(scene: Record<string, unknown>): Promise<boolean
   } catch {
     return false
   }
+}
+
+// ─── Pipeline command endpoints ──────────────────────────────────────────────
+// Wrappers for the legacy fetch+poll trigger (backend/api_server.py's
+// POST /command + GET /command/status, left unchanged for back-compat).
+// usePipelineStream.ts uses connectPipelineWebSocket() instead — these two
+// exist so no caller has to hand-roll the BASE_URL string directly.
+
+export async function postCommand(command: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${BASE_URL}/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command }),
+  })
+  return (await res.json()) as { status: string; message: string }
+}
+
+export async function fetchCommandStatus(): Promise<{ running: boolean; state: string; message: string }> {
+  return safeFetch(`${BASE_URL}/command/status`, { running: false, state: "idle", message: "" })
+}
+
+// ─── Pipeline WebSocket ──────────────────────────────────────────────────────
+
+export function connectPipelineWebSocket(): WebSocket {
+  return new WebSocket(`${WS_BASE_URL}/ws/pipeline`)
+}
+
+/** MJPEG preview stream of the desktop OpenGL renderer. */
+export function renderStreamUrl(): string {
+  return `${BASE_URL}/stream`
+}
+
+/** Endpoint for forwarding keyboard actions to the desktop renderer. */
+export function renderControlUrl(): string {
+  return `${BASE_URL}/control`
 }
